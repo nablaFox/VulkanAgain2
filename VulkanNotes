@@ -1,0 +1,285 @@
+Generic terms:
+	- handle: pointer to a resource
+
+VkInstance: used to access the drivers. The vulkan API context
+
+VkPhysicalDevice: phyisical GPU
+
+VkDevice: the "logical" GPU, i.e. the driver we can use to do actually execute things on the GPU
+
+VkBuffer: chunk of GPU memory
+
+-- IMAGES --
+
+Image object: fundamental resource that represents a set of pixels
+
+Mipmaps: recalculated, downscaled versions of an image
+	- each new image (level) is half the width and height of the previous one.
+	- mip chain: set of consecutive mip map levels
+	- number of mip levels is specified when the VkImage is created
+
+VkImage: handle to the actual image object that we can use as a texture or as a buffer to render into
+	- VkImages can be used as attachments in framebuffers, serving as the destination for rendering operations
+	- Since they are image objects, they can be also used to pass texture data to shaders
+	- it is stored in the GPU memory; we can allocate it with vma
+
+Image Aspect: e refers to a specific component or channel within the image data:
+	- we can access just color data, depth information or stencil data
+	- can be used when we "query" an image, i.e. to select a "subrange" of an image
+
+Image Layers: an image can be of different types:
+	- Single-Layer Images: 2D matrices, which hold pixels, i.e. color, depth and stencil information
+	- Array Textures (Multi-Layer Images): ollection of single-layer images stacked together, forming a 3D data structure
+
+Image Layouts: images can exist in different states called layouts
+	- specify how the image data can be accessed and used
+	- we can transition layouts, and for that use "barriers", which help sync this operation without risk
+
+VkImageSubresourceRange: specifies which parts of an image will be accessed in a Vulkan operation
+	- it is basically a sub-image
+	- we can select the Aspect (with an AspectMask), i.e. if we want only color, depth or stencil info
+	- we can select the mipmap level, and the mipmap chain
+	- we can select a specific layer, and the following ones, if we have a multi layer image
+
+VkImageView: it is an handle that points to a particular aspect of the image
+	- thin wrapper over the image itself: is the only way to access vulkan images
+	- we can use it to modify just the color of an image object, without touching the depth info
+	- as with SubresourceRange, we can select the mipmap and the layer
+
+Attachment:
+	memory object that is being used as an input or output target during the rendering process within a render pass
+	can be additional input data that we pass to the rendering process, or the render target
+	example:
+		- Color Attachment
+		- Depth Attachment
+		- Resolve Attachment
+
+VkFrameBuffer: a collection of attachments that a render pass instance uses
+	- The GPU does not write pixels directly to the framebuffer but to the buffers that are attached to it
+	- The framebuffer is essentially a structure for combining several buffers, including images, that are used during the rendering process
+
+UsageFlags: ll images and buffers must fill a UsageFlags with what they will be used for. This allows the driver to perform optimizations 
+
+SwapchainImages: A specific type of Vulkan Images
+	- automatically allocated by vulkan => you can't destroy it, you just borrow it for its usage
+	- usage is primarily for presentation, with limited control over its format or specific operations
+	- a common practice is to have a custom allocated Vulkan Image, which we can copy in the swapchain image. This gives us more flexibility:
+		- we can use different formats (like RGBA 16 bit)
+		- we can use different resolutions
+	
+Blitting: process of efficiently copying image data from one image to another within the GPU:
+	- Transferring textures between different memory locations on the GPU
+	- resolving multisampled images to single-sampled images
+	- image processing operations within the GPU pipelin
+
+----
+
+VkRenderPass:
+	used to setup the target for rendering, and the state of the images we will be rendering to
+
+	it's like a template or a framework for rendering things
+
+	"used to setup the target for rendering": we specify the FrameBuffer, i.e. in which image we want to render
+	"and the state of the images will be rendering to": we can specify other data about the attachments we will be rendering
+
+	In summary in a RenderPass we do two things:
+
+	1. specify the FrameBuffer: the link to a GPU memory buffer (image) used for rendering
+	2. metadata regarding the overall rendering, such as the clear color, the dependencies between different stages of the rendering process, etc.
+
+VkCommandBuffer: holds the command we want to pass to the GPU. Each command we want to submit must be of VkCommandBuffer type
+	- each command we submit has the form vkCmdXXXXX
+
+VkCommandBufferPool: used to allocate Command Buffers
+	- it is related to a specific queue family, so when we create one we should specify the index of that queue family
+
+VkQueue: 
+	- Command buffers are executed by submitting them into a queue. It's the execution port for commands. 
+	- We can have different queues; example: queues for graphics commands, others for only memory commands
+	- Each queue is part of a Queue family, which represent its "type", i.e. what type of commands it supports
+	- It is common to use 3 queueu families: drawing, async compute, data transfer
+
+VkDescriptorSet: for Shaders
+
+VkSwapchainKHR:
+	- it's like a middleware between the application and the GPU. We can access the GPU images buffers with the swapchain
+	- we use the retrieved images in vulkan commands
+	- we can retrieve an index for the framebuffer (or directly the VulkanImage) used to render things into
+	- when we have a finished image, we can use that swapchain image reference as the thing to present on the screen, by submitting that reference on a presentation queue
+
+VkSurfaceKHR: 
+	used to render things on the actual monitor screen
+
+VkFence: used to syncrhonize GPU -> CPU communication
+	- we pass it to a queue, and will be updated when the job is done. With these we can know when a GPU has finished to execute the command
+
+VkSemaphore: GPU to GPU sync, allow defining order of operations on GPU:
+	- each time we execute something on the GPU, we can signal a semaphor and/or wait for a semaphor
+
+High Level application Flow:
+
+1. Get a framebuffer reference from the swapchain
+
+2. We create a RenderPass. This allow us to specify the target of rendering, that would generally be a framebuffer obtained from the swapchain. We can also specify some other metadata, such as the clear color, etc.
+
+3. After creating the RenderPass, now we have a specific target for rendering. Each render command would render onto that. 
+
+4. To render an object we bind the pipeline of the object, its vertex and buffer data and its descriptor set to the CommandBuffer.
+
+5. we save the draw command in the CommandBuffer
+
+6. We finish the render pass, and submit the CommandBuffer into a render Queue
+
+7. We present the rendered image with the Presentation queue
+
+With 1.3 dynamic rendering features:
+
+we don't have to manually create a render pass, we can instad directly specify the target of rendering with:
+vkCmdBeginRenderingKHR 
+
+-- GPU Buffers --
+
+"In vulkan, we can allocate general usage memory through buffers. 
+They are different from images in that they dont need samplers and act more as a typical cpu side structure or array. 
+We can access them in the shaders just as structures or array of structures."
+
+Two main general buffers:
+	- uniform buffers (UBO): 
+		- read only
+		- only a small amount can be accessed in the shader
+		- ultra fast
+		- great for material parameters and global scene configuration
+	- storage buffers:
+		- fully generic read-write buffers with very high size
+		- great for vertex geometry
+
+Traditionally we pass the buffer attachment with a descriptor set, where we would bind 1 buffer of a given type
+
+With Buffer Device Adress we can send an int64 pointer to the gpu, and access it in the shader, allowing also pointer arithmetics
+	- we can send it through push constants, for a really fast and easy way of binding the vertex data to the shaders.
+
+Mesh: a collection of geometric primitives that define the shape of an object to be rendered
+
+SSBO: Shader Storage Buffer Object
+
+staging buffer: temporary buffer used to transfer data between the CPU's memory and the GPU's memory
+	- CPU can't write directly inside VMA
+	- we first write inside a staging buffer and then copy it to VMA
+---
+
+-- GLTF -- 
+
+glTF: Graphics Library Transmission Format 
+	
+Contains:
+	- list mashes (objects essentially)
+	- There can be meshes that uses different materials: to draw them we need multiple calls
+	- scene-tree of scenenodes
+
+---
+
+-- SHADERS --
+
+VkPipeline: object that contains a series of programmable steps that will be executed by the GPU. 
+
+We have two types of Pipelines, Graphics and Compute.
+
+Graphics pipeline:
+	- Shader Stages: reference to the shaders code
+	- fixed-function stages: configuration for pre-defined processing steps handled by the GPU itself (rasterization, blending, etc)
+	- Input Assembly: Defines how vertex data is interpreted, including the format and how vertices are grouped together (triangles, lines)
+	- Rasterizer: configuration for the rasterization stage (how triangles are converted into fragments, culling, etc)
+	- Viewport and Scissor, Depth and Stencil, Blend, Multisample steps
+
+Compute pipeline: much simpler
+	- only require data for shader code, and layout for the descriptors used for data bindings
+
+Descriptor: specify which resources are accessed by a shader stage and how they are accessed
+	- they are the data binding of a shader
+	- a handle or pointer into a resource (pointer to vertex data, or an image buffer)
+
+Descritpor set: groups together individual descriptors, each describing a specific resource binding
+	- used to to connect the shaders to buffers and images
+	- can be updated using vkUpdateDescriptorSets
+	- can be binded to a pipeline using VkBindDescriptorSets, and the data its refering to will be available in the shader
+	- a pipeline has different descriptor set slots
+	- example: bind an image to a compute shader, so we can draw on that image with the shader
+	- in a shader, to access the individual binding, we specify the descriptor set index (the pipeline slot number), and the binding index inside that descriptor set (binding index)
+
+Descriptor layouts: contains the information about what that descriptor set should hold
+	- the type of all the resources used by the descriptor set
+
+Descriptor pool: used to allocate a descriptor set
+	- each allocate descriptor set is relative to a descriptor layout
+	- it needs the max number of descriptor set we are going to use (maxSets)
+	- it needs to know the number of each descriptor type (poolSizes)
+
+Push constant: feature unique to Vulkan
+	- is data encoded directly in command buffers
+
+VkPipelineLayout: it defines the Descriptor sets used by a Pipeline and its Push Constants
+
+In general, when we talk about pipelines, think about shaders + additional data
+	- compute pipeline: compute shader + descriptor set + push constant
+	- graphics pipeline: frag shader + vert shader + vertex input + ...
+
+texels: pixels of a texture
+
+u: unsigned
+i: integer
+
+uvec3: a three component vector
+	- we can extract two or three components at the same time with .xy or .xyz
+
+COMPUTE SHADERS:
+
+Workgroup: small group of threads in a compute shader
+	- composed of lanes (threads), generally in 3 dimensions
+	- each lane is responsable for a single pixel; 
+
+gl_WorkGroupSize: total number of work groups
+
+gl_LocalInvocationID: unique identifier of the current thread within its work group; 
+	- we can use it to access the current thread pixel within a work group (a grid or a cube)
+	- variable of type uvec3
+
+gl_GlobalInvocationID: unique identifier of the current thread within the entire global grid of threads launched for the compute shader
+	- same usage as gl_LocalInvocationID, but we are referring to the entire image
+	- calculated as: gl_WorkGroupID * gl_WorkGroupSize + gl_LocalInvocationID (arrays)
+---
+
+-- Graphics Pipeline --
+
+Type of Vulkan Pipeline: an object that encapsulates all the shader stages and any relevant fixed-function stages required for rendering or computing
+
+VkPipelineVertexInputStateCreateInfo: configuration for the vertex input attribute, to which we will pass vertex buffers
+
+VkPipelineInputAssemblyStateCreateInfo: configuration for topology; we can use this to draw triangles, points or lines
+
+VkPipelineViewportStateCreateInfo: the viewport the pixels will be rendered into
+
+VkPipelineRasterizationStateCreateInfo: rasterization options
+
+VkPipelineMultisampleStateCreateInfo: multi sample antialiasing config
+
+VkPipelineDepthStencilStateCreateInfo: depth-stencil configuration
+
+VkPipelineColorBlendStateCreateInfo: used to make triangles transparent or other blending configurations
+
+VkPipelineDynamicStateCreateInfo: to set some configurations as dynamic; we can use it to avoid recreating different pipelines
+
+gl_Position: built-in output variable that the vertex shader must write to, specifying the final position of the vertex in clip space
+gl_VertexIndex: built-in input variable that represents the index of the current vertex being processed
+	- its length will depend on how many times we call the shader
+
+Vertex shader: is used to process the vertex input data
+	- the input is the vertex buffer data
+	- used to transform the coordinates of the models into screen coordiantes for example
+	- each vertex shader should write to gl_Position
+
+Fragment shader: is used to compute the final color of each pixel
+	- the output should be a color value
+
+---
+
+Draw Context: array of all things that can be rendered

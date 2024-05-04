@@ -1,0 +1,54 @@
+----
+VulkanDriver: 
+	- GPU vendor implementation of Vulkan Functions
+	- bridge between high-level vulkan commands into low-level GPU instructions
+
+VulkanLoader: 
+	- <vulkan.h>, <vulkan_core.h> declare function pointers, not the function themselves
+	- these placeholders will be resolved at runtime with the actual implementations provided by the Vulkan Driver
+	- this process is done by the loader
+
+VkInstance: 
+	- first object to be created
+	- object containing all per-application state
+	- creating an instance initialize the vulkan loader
+----
+
+----
+VkSurfaceKHR: 
+	- enables vulkan to render onto a screen
+	- is the interface between Vulkan and the platform's windowing system
+	- it provides necessary details such as surface dimensions, format, and presentation capabilities
+	- we use vkQueuePresentKHR to rendering an image onto a surface
+
+VkPhysicalDevice: 
+	- the physical(s) GPU on the system
+	- it is used to initialize one or more logical drivers
+	- we can query for a physical device compatible with certain features and with a rendering surface
+
+VkDevice:
+	- the driver which give access to a given GPU
+	- it needs to be used on every vulkan call
+----
+
+
+--- QUEUES
+Each vulkan command should be submitted through a queue
+
+We have different types of queues for different types of commands
+
+The main ones are those for presenting on the surface (screen) (PresentationQueue)
+and the ones used to submit rendering commands (GraphicsQueue)
+
+Commands on the same queue will be executed sequentially, whereas commands submitted to
+different queues will be unordered relative to each other
+
+Each queue belongs to a Queue Family, the "type" of said queue, i.e. the what type of commands it supports
+---
+
+--- COMMAND EXECUTION FLOW
+
+1. Allocate a command buffer through a VkCommandPool
+2. Record commands into that command buffer, using VkCmdXXXX functions
+3. Submit the command into a VkQueue
+---
