@@ -1,5 +1,6 @@
-#include <deque>
-#include <functional>
+#pragma once
+
+#include "vke_types.hpp"
 
 namespace vkutil {
 

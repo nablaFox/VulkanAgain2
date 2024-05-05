@@ -4,11 +4,11 @@
 
 namespace vke {
 
-class VkEngine;
+class VkeDevice;
 
 class VkeAllocator {
 public:
-	VkeAllocator(VkEngine* engine) : m_engine(engine) {}
+	VkeAllocator(VkeDevice* device) : m_device(device) {}
 	~VkeAllocator();
 
 	void init();
@@ -19,7 +19,7 @@ public:
 
 private:
 	VmaAllocator m_allocator;
-	VkEngine* m_engine;
+	VkeDevice* m_device;
 };
 
 } // namespace vke

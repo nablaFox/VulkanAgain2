@@ -21,7 +21,7 @@ void VkeSwapchain::create(VkExtent2D extent, VkFormat format) {
 		.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR,
 	};
 
-	vkb::SwapchainBuilder swapchainBuilder{m_engine->m_chosenGPU, m_engine->m_device, m_engine->m_surface};
+	vkb::SwapchainBuilder swapchainBuilder{m_device->m_chosenGPU, m_device->m_device, m_device->m_surface};
 	vkb::Swapchain vkbSwapchain = swapchainBuilder.set_desired_format(swapchainFormat)
 									  .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
 									  .set_desired_extent(extent.width, extent.height)
@@ -42,25 +42,25 @@ void VkeSwapchain::create(VkExtent2D extent, VkFormat format) {
 }
 
 void VkeSwapchain::acquireImage(VkSemaphore semaphore) {
-	VK_CHECK(vkAcquireNextImageKHR(m_engine->m_device, m_swapchain, 1000000000, semaphore, nullptr, &m_currentImage));
+	VK_CHECK(vkAcquireNextImageKHR(m_device->m_device, m_swapchain, 1000000000, semaphore, nullptr, &m_currentImage));
 }
 
 void VkeSwapchain::presentOnScreen(VkSemaphore semaphore) {
 	m_presentInfo.waitSemaphoreCount = 1;
 	m_presentInfo.pWaitSemaphores = &semaphore;
 
-	VK_CHECK(vkQueuePresentKHR(m_engine->m_graphicsQueue, &m_presentInfo));
+	VK_CHECK(vkQueuePresentKHR(m_device->m_graphicsQueue, &m_presentInfo));
 }
 
-VkeSwapchain::~VkeSwapchain() { assert(m_engine == nullptr); }
+VkeSwapchain::~VkeSwapchain() { assert(m_device == nullptr); }
 
 void VkeSwapchain::destroy() {
-	vkDestroySwapchainKHR(m_engine->m_device, m_swapchain, nullptr);
+	vkDestroySwapchainKHR(m_device->m_device, m_swapchain, nullptr);
 
 	for (auto image : m_swapchainImages)
-		vkDestroyImageView(m_engine->m_device, image.imageView, nullptr);
+		vkDestroyImageView(m_device->m_device, image.imageView, nullptr);
 
-	m_engine = nullptr;
+	m_device = nullptr;
 }
 
 } // namespace vke

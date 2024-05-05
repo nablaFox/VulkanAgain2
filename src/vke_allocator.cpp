@@ -1,8 +1,7 @@
 #include "vke_allocator.hpp"
 
-#include "vke_engine.hpp"
+#include "vke_device.hpp"
 #include "vke_initializers.hpp"
-#include "vke_images.hpp"
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -11,9 +10,9 @@ namespace vke {
 
 void VkeAllocator::init() {
 	VmaAllocatorCreateInfo allocatorInfo = {};
-	allocatorInfo.physicalDevice = m_engine->m_chosenGPU;
-	allocatorInfo.device = m_engine->m_device;
-	allocatorInfo.instance = m_engine->m_instance;
+	allocatorInfo.physicalDevice = m_device->m_chosenGPU;
+	allocatorInfo.device = m_device->m_device;
+	allocatorInfo.instance = m_device->m_instance;
 	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 	vmaCreateAllocator(&allocatorInfo, &m_allocator);
 }
@@ -44,19 +43,19 @@ void VkeAllocator::createDrawImage(VkExtent2D extent, AllocatedImage* image) {
 
 	auto imageViewCreateInfo = vkinit::imageViewCreateInfo(image->imageFormat, image->image, VK_IMAGE_ASPECT_COLOR_BIT);
 
-	VK_CHECK(vkCreateImageView(m_engine->m_device, &imageViewCreateInfo, nullptr, &image->imageView));
+	VK_CHECK(vkCreateImageView(m_device->m_device, &imageViewCreateInfo, nullptr, &image->imageView));
 }
 
 void VkeAllocator::destroyImage(AllocatedImage& image) {
-	vkDestroyImageView(m_engine->m_device, image.imageView, nullptr);
+	vkDestroyImageView(m_device->m_device, image.imageView, nullptr);
 	vmaDestroyImage(m_allocator, image.image, image.allocation);
 }
 
-VkeAllocator::~VkeAllocator() { assert(m_engine == nullptr); }
+VkeAllocator::~VkeAllocator() { assert(m_device == nullptr); }
 
 void VkeAllocator::destroy() {
 	vmaDestroyAllocator(m_allocator);
-	m_engine = nullptr;
+	m_device = nullptr;
 }
 
 } // namespace vke

@@ -4,6 +4,8 @@
 
 #include <vulkan/vk_enum_string_helper.h>
 
+#include <deque>
+#include <functional>
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
 #include <GLFW/glfw3.h>
@@ -21,6 +23,10 @@ struct AllocatedImage : VkeImage {
 	VkExtent2D imageExtent;
 	VkFormat imageFormat;
 };
+
+#define VK_RETURN(result)                                                                                                        \
+	if (result != VK_SUCCESS)                                                                                                    \
+		return result;
 
 #define VK_CHECK(x)                                                                                                              \
 	do {                                                                                                                         \

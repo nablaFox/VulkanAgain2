@@ -5,11 +5,12 @@
 
 namespace vke {
 
-class VkEngine;
+class VkeDevice;
 
 class VkeSwapchain {
+
 public:
-	VkeSwapchain(VkEngine* engine) : m_engine(engine) {}
+	VkeSwapchain(VkeDevice* device) : m_device(device) {}
 	~VkeSwapchain();
 
 	void init();
@@ -26,7 +27,7 @@ public:
 	VkSwapchainKHR& get_swapchain() { return m_swapchain; }
 
 private:
-	VkEngine* m_engine;
+	VkeDevice* m_device;
 
 	VkSwapchainKHR m_swapchain;
 	VkFormat m_swapchainImageFormat;

@@ -1,68 +1,56 @@
 #pragma once
 
-#include "vke_allocator.hpp"
-#include "vke_images.hpp"
-#include "vke_swapchain.hpp"
+#include "vke_frame.hpp"
+#include "vke_device.hpp"
 #include "vke_types.hpp"
 #include "vke_utils.hpp"
+#include "vke_window.hpp"
+#include "vke_pipelines.hpp"
 
 namespace vke {
 
-struct FrameData {
-	VkSemaphore _swapchainSemaphore, _renderSemaphore;
-	VkFence _renderFence;
-
-	VkCommandPool _commandPool;
-	VkCommandBuffer _commandBuffer;
-
-	vkutil::DeletionQueue _deletionQueue;
+struct GameEngineSettings {
+	const char* appName = "Vulkan Engine";
+	uint32_t windowWidth = 1280;
+	uint32_t windowHeight = 720;
+	bool resizableWindow = false;
 };
 
 class VkEngine {
 public:
+	static constexpr GameEngineSettings defaultSettings{};
+
 	bool m_initiliazed{false};
 	int m_frame{0};
 
 	static constexpr unsigned int FRAME_OVERLAP = 2;
 
-	VkExtent2D m_windowExtent{700, 800};
-	GLFWwindow* m_window;
-
-	void init();
+	void init(GameEngineSettings settings = defaultSettings);
 	void run();
 	void destroy();
 
-	void draw();
-
-	friend class VkeSwapchain;
-	friend class VkeAllocator;
-
-	VkeSwapchain m_swapchain{this};
-	VkeAllocator m_allocator{this};
+	void drawTest();
 
 private:
-	VkInstance m_instance;
-	VkDebugUtilsMessengerEXT m_debugMessenger;
-	VkSurfaceKHR m_surface;
-	VkPhysicalDevice m_chosenGPU;
-	VkDevice m_device;
-
-	VkQueue m_graphicsQueue;
-	uint32_t m_graphicsQueueFamily;
+	VkeWindow* m_window;
+	VkeSwapchain* m_swapchain;
+	VkeDevice* m_device;
 
 	FrameData m_frames[FRAME_OVERLAP];
 	FrameData& getCurrentFrame() { return m_frames[m_frame % FRAME_OVERLAP]; }
 
-	AllocatedImage m_drawImage;
-	VkExtent2D m_drawExtent;
+	VkeGraphicsPipeline m_meshPipeline;
+	VkeComputePipeline m_computePipeline;
 
-	vkutil::DeletionQueue m_deletionQueue;
+	VkeShader m_vertexShader;
+	VkeShader m_fragmentShader;
+	VkeShader m_computeShader;
 
 private:
-	void initVulkan();
-	void initSwapchain();
-	void initCommands();
-	void initSyncStructures();
+	void startFrame();
+	void endFrame();
+
+	void initPipelines();
 };
 
 } // namespace vke
