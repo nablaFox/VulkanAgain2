@@ -1,21 +1,15 @@
+#include "vke_engine.hpp"
 #include "vke_device.hpp"
 #include "vke_initializers.hpp"
+
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
 
 namespace vke {
 
 constexpr bool useValidationLayers = true; // TODO: handle debug mode in a better way
 
-void VkeDevice::create(VkeDevice* device) {
-	static VkeDevice* instance = nullptr;
-
-	if (instance != nullptr)
-		return;
-
-	device = new VkeDevice();
-	instance = device;
-}
-
-VkResult VkeDevice::initialize(VkeWindow* window) {
+VkResult VkeDevice::init(VkeWindow* window) {
 	vkb::InstanceBuilder builder;
 
 	auto instRet = builder.set_app_name("Vulkan Engine")
@@ -26,11 +20,11 @@ VkResult VkeDevice::initialize(VkeWindow* window) {
 
 	vkb::Instance vkbInst = instRet.value();
 
-	m_instance = vkbInst.instance;
+	m_vkInstance = vkbInst.instance;
 	m_debugMessenger = vkbInst.debug_messenger;
 
 	// physical and logical devices
-	VK_RETURN(glfwCreateWindowSurface(m_instance, window->getWindow(), nullptr, &m_surface));
+	VK_RETURN(glfwCreateWindowSurface(m_vkInstance, window->getWindow(), nullptr, &m_surface));
 
 	VkPhysicalDeviceVulkan13Features features{};
 	features.dynamicRendering = true;
@@ -57,18 +51,16 @@ VkResult VkeDevice::initialize(VkeWindow* window) {
 	m_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
 	m_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 
-	// swapchain & allocator
-	m_swapchain.init();
-	m_swapchain.create(window->getExtent(), VK_FORMAT_B8G8R8A8_UNORM);
+	VmaAllocatorCreateInfo allocatorInfo = {
+		.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+		.physicalDevice = m_chosenGPU,
+		.device = m_device,
+		.instance = m_vkInstance,
+	};
 
-	m_allocator.init();
-	m_allocator.createDrawImage(window->getExtent(), &m_drawImage);
+	VK_RETURN(vmaCreateAllocator(&allocatorInfo, &m_allocator));
 
-	m_deletionQueue.push_function([this] {
-		m_allocator.destroyImage(m_drawImage);
-		m_swapchain.destroy();
-		m_allocator.destroy();
-	});
+	m_deletionQueue.push_function([this] { vmaDestroyAllocator(m_allocator); });
 
 	return VK_SUCCESS;
 }
@@ -144,14 +136,55 @@ VkResult VkeDevice::createGraphicsPipeline(VkeGraphicsPipeline& pipeline) {
 	return VK_SUCCESS;
 }
 
+VkResult VkeDevice::createDrawImage(VkExtent2D extent, AllocatedImage* image) {
+	VkExtent3D drawImageExtent = {
+		extent.width,
+		extent.height,
+		1,
+	};
+
+	image->imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+	image->imageExtent = extent;
+
+	VkImageUsageFlags drawImageUsages{};
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	auto imageCreateInfo = vkinit::imageCreateInfo(image->imageFormat, drawImageUsages, drawImageExtent);
+
+	VmaAllocationCreateInfo imageAllocInfo{};
+	imageAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	imageAllocInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	vmaCreateImage(m_allocator, &imageCreateInfo, &imageAllocInfo, &image->image, &image->allocation, nullptr);
+
+	auto imageViewCreateInfo = vkinit::imageViewCreateInfo(image->imageFormat, image->image, VK_IMAGE_ASPECT_COLOR_BIT);
+
+	VK_RETURN(vkCreateImageView(m_device, &imageViewCreateInfo, nullptr, &image->imageView));
+
+	m_deletionQueue.push_function([this, image] {
+		vkDestroyImageView(m_device, image->imageView, nullptr);
+		vmaDestroyImage(m_allocator, image->image, image->allocation);
+	});
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::submitCommand(int submitCount, VkSubmitInfo2* submitInfo, VkFence fence) {
+	VK_RETURN(vkQueueSubmit2(m_graphicsQueue, submitCount, submitInfo, fence));
+	return VK_SUCCESS;
+}
+
 void VkeDevice::destroy() {
 	m_deletionQueue.flush();
 
-	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+	vkDestroySurfaceKHR(m_vkInstance, m_surface, nullptr);
 
 	vkDestroyDevice(m_device, nullptr);
-	vkb::destroy_debug_utils_messenger(m_instance, m_debugMessenger);
-	vkDestroyInstance(m_instance, nullptr);
+	vkb::destroy_debug_utils_messenger(m_vkInstance, m_debugMessenger);
+	vkDestroyInstance(m_vkInstance, nullptr);
 }
 
 } // namespace vke

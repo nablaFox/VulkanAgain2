@@ -5,11 +5,8 @@
 namespace vke {
 
 class VkeWindow {
-private:
-	VkeWindow(){};
-
 public:
-	static void create(VkeWindow* window);
+	VkeWindow(){};
 
 	VkResult init(const char* title, uint32_t width, uint32_t height);
 	void destroy();

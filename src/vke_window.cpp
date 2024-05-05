@@ -5,15 +5,6 @@
 
 namespace vke {
 
-void VkeWindow::create(VkeWindow* window) {
-	static VkeWindow* instance = nullptr;
-	if (instance == nullptr)
-		return;
-
-	window = new VkeWindow();
-	instance = window;
-}
-
 // TODO: add other parameters
 VkResult VkeWindow::init(const char* title, uint32_t width, uint32_t height) {
 	glfwInit();

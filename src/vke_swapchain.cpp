@@ -5,16 +5,14 @@
 
 namespace vke {
 
-void VkeSwapchain::init() {
+void VkeSwapchain::init(VkeDevice* device, VkExtent2D extent, VkFormat format) {
+	m_device = device;
+	m_swapchainImageFormat = format;
 	m_presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	m_presentInfo.pNext = nullptr;
 	m_presentInfo.pSwapchains = &m_swapchain;
 	m_presentInfo.swapchainCount = 1;
 	m_presentInfo.pImageIndices = &m_currentImage;
-}
-
-void VkeSwapchain::create(VkExtent2D extent, VkFormat format) {
-	m_swapchainImageFormat = format;
 
 	VkSurfaceFormatKHR swapchainFormat{
 		.format = m_swapchainImageFormat,

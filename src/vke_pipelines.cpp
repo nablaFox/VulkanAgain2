@@ -71,6 +71,18 @@ VkeGraphicsPipeline VkeGraphicsPipeline::setPipelineLayout(VkPipelineLayout layo
 	return *this;
 }
 
+VkeGraphicsPipeline VkeGraphicsPipeline::setShaders(VkeShader& vertexShader, VkeShader& fragmentShader) { return *this; }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::setInputTopology(VkPrimitiveTopology topology) { return *this; }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::setPolygonMode(VkPolygonMode mode) { return *this; }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::setCullMode(VkCullModeFlags mode, VkFrontFace frontFace) { return *this; }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::setMultisamplingNone() { return *this; }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::disableBlending() { return *this; }
+
 VkeGraphicsPipeline VkeGraphicsPipeline::setColorAttachmentFormat(VkFormat format) {
 	m_colorAttachmentFormat = format;
 	m_renderInfo.colorAttachmentCount = 1;
@@ -82,6 +94,8 @@ VkeGraphicsPipeline VkeGraphicsPipeline::setDepthFormat(VkFormat format) {
 	m_renderInfo.depthAttachmentFormat = format;
 	return *this;
 }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::enableDepthTest(bool enable, VkCompareOp op) { return *this; }
 
 VkeGraphicsPipeline VkeGraphicsPipeline::disableDepthTest() {
 	m_depthStencil.depthTestEnable = VK_FALSE;
@@ -97,5 +111,9 @@ VkeGraphicsPipeline VkeGraphicsPipeline::disableDepthTest() {
 
 	return *this;
 }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::enableBlendingAdditive() { return *this; }
+
+VkeGraphicsPipeline VkeGraphicsPipeline::enableBlendingAlphablend() { return *this; }
 
 } // namespace vke

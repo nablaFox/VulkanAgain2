@@ -1,7 +1,6 @@
 #pragma once
 
 #include "vke_types.hpp"
-#include <vulkan/vulkan_core.h>
 
 namespace vke {
 
@@ -10,13 +9,10 @@ class VkeDevice;
 class VkeSwapchain {
 
 public:
-	VkeSwapchain(VkeDevice* device) : m_device(device) {}
+	VkeSwapchain(){};
 	~VkeSwapchain();
 
-	void init();
-
-	void create(VkExtent2D extent, VkFormat format);
-
+	void init(VkeDevice* device, VkExtent2D extent, VkFormat format); // TODO: return VkResult
 	void destroy();
 
 	void acquireImage(VkSemaphore semaphore = nullptr);
