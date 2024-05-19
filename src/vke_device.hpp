@@ -32,9 +32,15 @@ public:
 	VkResult createFence(VkFence* fence, VkFenceCreateFlags flags = 0);
 	VkResult initFrameData(FrameData* frame, int count);
 	VkResult createShader(VkeShader& shader, const char* path);
+	VkResult destroyShader(VkeShader& shader);
+	VkResult createPipelineLayout(VkePipeline& pipeline, VkPipelineLayoutCreateInfo& layoutInfo);
 	VkResult createGraphicsPipeline(VkeGraphicsPipeline& pipeline);
 	VkResult createDrawImage(VkExtent2D extent, AllocatedImage* image);
 	VkResult submitCommand(int submitCount, VkSubmitInfo2* submitInfo, VkFence fence = VK_NULL_HANDLE);
+	VkResult createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer* buffer,
+						  bool temp = false);
+	VkResult createStagingBuffer(size_t allocSize, AllocatedBuffer* buffer, void*& data);
+	VkResult destroyBuffer(AllocatedBuffer* buffer);
 
 private:
 	VkInstance m_vkInstance;

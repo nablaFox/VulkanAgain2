@@ -8,6 +8,8 @@ namespace vke {
 
 class VkePipeline {
 
+	friend class VkeDevice;
+
 protected:
 	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
@@ -18,22 +20,22 @@ class VkeGraphicsPipeline : public VkePipeline {
 	friend class VkeDevice;
 
 public:
-	VkeGraphicsPipeline() {}
+	VkeGraphicsPipeline();
+	void bind(VkCommandBuffer cmd);
+	void pushConstants(VkCommandBuffer cmd, GPUDrawPushConstants* constants);
 
-	VkeGraphicsPipeline init();
-	VkeGraphicsPipeline setPipelineLayout(VkPipelineLayout layout);
-	VkeGraphicsPipeline setShaders(VkeShader& vertexShader, VkeShader& fragmentShader);
-	VkeGraphicsPipeline setInputTopology(VkPrimitiveTopology topology);
-	VkeGraphicsPipeline setPolygonMode(VkPolygonMode mode);
-	VkeGraphicsPipeline setCullMode(VkCullModeFlags mode, VkFrontFace frontFace);
-	VkeGraphicsPipeline setMultisamplingNone();
-	VkeGraphicsPipeline disableBlending();
-	VkeGraphicsPipeline setColorAttachmentFormat(VkFormat format);
-	VkeGraphicsPipeline setDepthFormat(VkFormat format);
-	VkeGraphicsPipeline enableDepthTest(bool enable, VkCompareOp op = VK_COMPARE_OP_LESS);
-	VkeGraphicsPipeline disableDepthTest();
-	VkeGraphicsPipeline enableBlendingAdditive();
-	VkeGraphicsPipeline enableBlendingAlphablend();
+	VkeGraphicsPipeline& setShaders(VkeShader& vertexShader, VkeShader& fragmentShader);
+	VkeGraphicsPipeline& setInputTopology(VkPrimitiveTopology topology);
+	VkeGraphicsPipeline& setPolygonMode(VkPolygonMode mode);
+	VkeGraphicsPipeline& setCullMode(VkCullModeFlags mode, VkFrontFace frontFace);
+	VkeGraphicsPipeline& setMultisamplingNone();
+	VkeGraphicsPipeline& disableBlending();
+	VkeGraphicsPipeline& setColorAttachmentFormat(VkFormat format);
+	VkeGraphicsPipeline& setDepthFormat(VkFormat format);
+	VkeGraphicsPipeline& enableDepthTest(bool enable, VkCompareOp op = VK_COMPARE_OP_LESS);
+	VkeGraphicsPipeline& disableDepthTest();
+	VkeGraphicsPipeline& enableBlendingAdditive();
+	VkeGraphicsPipeline& enableBlendingAlphablend();
 
 private:
 	VkGraphicsPipelineCreateInfo buildPipelineInfo();

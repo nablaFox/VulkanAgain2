@@ -119,8 +119,18 @@ VkResult VkeDevice::createShader(VkeShader& shader, const char* path) {
 
 	VK_RETURN(vkCreateShaderModule(m_device, &createInfo, nullptr, &shader.m_shaderModule));
 
-	m_deletionQueue.push_function([this, &shader] { vkDestroyShaderModule(m_device, shader.m_shaderModule, nullptr); });
+	fmt::println("Shader module created: {}", path);
 
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::destroyShader(VkeShader& shader) {
+	vkDestroyShaderModule(m_device, shader.m_shaderModule, nullptr);
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::createPipelineLayout(VkePipeline& pipeline, VkPipelineLayoutCreateInfo& layoutInfo) {
+	VK_RETURN(vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &pipeline.m_pipelineLayout));
 	return VK_SUCCESS;
 }
 
@@ -174,6 +184,39 @@ VkResult VkeDevice::createDrawImage(VkExtent2D extent, AllocatedImage* image) {
 
 VkResult VkeDevice::submitCommand(int submitCount, VkSubmitInfo2* submitInfo, VkFence fence) {
 	VK_RETURN(vkQueueSubmit2(m_graphicsQueue, submitCount, submitInfo, fence));
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer* buffer,
+								 bool temp) {
+	VkBufferCreateInfo bufferInfo = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.pNext = nullptr,
+		.size = allocSize,
+		.usage = usage,
+	};
+
+	VmaAllocationCreateInfo vmaallocInfo = {
+		.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		.usage = memoryUsage,
+	};
+
+	VK_RETURN(vmaCreateBuffer(m_allocator, &bufferInfo, &vmaallocInfo, &buffer->buffer, &buffer->allocation, &buffer->info));
+
+	if (!temp)
+		m_deletionQueue.push_function([this, &buffer] { destroyBuffer(buffer); });
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::createStagingBuffer(size_t allocSize, AllocatedBuffer* staging, void*& data) {
+	VK_RETURN(createBuffer(allocSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY, staging, true));
+	data = staging->allocation->GetMappedData();
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::destroyBuffer(AllocatedBuffer* buffer) {
+	vmaDestroyBuffer(m_allocator, buffer->buffer, buffer->allocation);
 	return VK_SUCCESS;
 }
 

@@ -16,6 +16,8 @@ public:
 
 	VkeShader() {}
 
+	const VkShaderModule& getModule() { return m_shaderModule; }
+
 private:
 	VkShaderModule m_shaderModule;
 	const char* m_name;

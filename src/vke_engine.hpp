@@ -25,6 +25,12 @@ struct FrameData {
 	vkutil::DeletionQueue _deletionQueue;
 };
 
+struct ImmediateData {
+	VkCommandBuffer _commandBuffer;
+	VkCommandPool _commandPool;
+	VkFence _fence;
+};
+
 class VkEngine {
 public:
 	static constexpr GameEngineSettings defaultSettings{};
@@ -38,7 +44,13 @@ public:
 	void run();
 	void destroy();
 
-	void drawTest();
+	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
+	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+
+	void drawGeometryTest();
+	void drawComputeTest();
+	void initTestData();
+	GPUMeshBuffers m_testMesh;
 
 private:
 	VkeWindow m_window;
@@ -58,6 +70,8 @@ private:
 	VkeShader m_vertexShader;
 	VkeShader m_fragmentShader;
 	VkeShader m_computeShader;
+
+	ImmediateData m_immData;
 
 private:
 	void startFrame();

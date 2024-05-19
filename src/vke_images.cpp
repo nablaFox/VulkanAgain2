@@ -69,6 +69,11 @@ void makeWriteable(VkCommandBuffer cmd, VkeImage& image) {
 	image.currentLayout = VK_IMAGE_LAYOUT_GENERAL;
 }
 
+void makeColorWriteable(VkCommandBuffer buffer, VkeImage& image) {
+	transitionImage(buffer, image.image, image.currentLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	image.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+}
+
 void makePresentable(VkCommandBuffer cmd, VkeImage& image) {
 	transitionImage(cmd, image.image, image.currentLayout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	image.currentLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -89,6 +94,28 @@ void copyImageToImage(VkCommandBuffer cmd, VkeImage& src, VkeImage& dst, VkExten
 	makeCopyable(cmd, dst);
 
 	copyImageToImage(cmd, src.image, dst.image, srcSize, dstSize);
+}
+
+void setViewport(VkCommandBuffer cmd, VkExtent2D extent, float minDepth, float maxDepth, int x, int y) {
+	VkViewport viewport = {};
+	viewport.x = x;
+	viewport.y = y;
+	viewport.width = extent.width;
+	viewport.height = extent.height;
+	viewport.minDepth = minDepth;
+	viewport.maxDepth = maxDepth;
+
+	vkCmdSetViewport(cmd, 0, 1, &viewport);
+}
+
+void setScissor(VkCommandBuffer cmd, VkExtent2D extent, int x, int y) {
+	VkRect2D scissor = {};
+	scissor.offset.x = x;
+	scissor.offset.y = y;
+	scissor.extent.width = extent.width;
+	scissor.extent.height = extent.height;
+
+	vkCmdSetScissor(cmd, 0, 1, &scissor);
 }
 
 } // namespace vkutil

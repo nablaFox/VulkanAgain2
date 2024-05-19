@@ -13,17 +13,26 @@ void VkEngine::init(GameEngineSettings settings) {
 	m_swapchain.init(&m_device, m_window.getExtent(), VK_FORMAT_B8G8R8A8_UNORM);
 
 	VK_CHECK(m_device.initFrameData(m_frames, FRAME_OVERLAP));
+
+	VK_CHECK(m_device.createCommandPool(&m_immData._commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+	VK_CHECK(m_device.allocateCommandBuffer(&m_immData._commandBuffer, m_immData._commandPool));
+	VK_CHECK(m_device.createFence(&m_immData._fence, VK_FENCE_CREATE_SIGNALED_BIT));
+
 	VK_CHECK(m_device.createDrawImage(m_window.getExtent(), &m_drawImage));
+
+	initPipelines();
+	initTestData();
+
+	fmt::println("Engine initialized");
 
 	m_initiliazed = true;
 }
 
 void VkEngine::initPipelines() {
-	VK_CHECK(m_device.createShader(m_vertexShader, "shaders/vert.spv"));
-	VK_CHECK(m_device.createShader(m_fragmentShader, "shaders/frag.spv"));
+	VK_CHECK(m_device.createShader(m_vertexShader, "shaders/basic.vert.spv"));
+	VK_CHECK(m_device.createShader(m_fragmentShader, "shaders/basic.frag.spv"));
 
-	m_meshPipeline.init()
-		.setShaders(m_vertexShader, m_fragmentShader)
+	m_meshPipeline.setShaders(m_vertexShader, m_fragmentShader)
 		.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 		.setPolygonMode(VK_POLYGON_MODE_FILL)
 		.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE)
@@ -32,7 +41,20 @@ void VkEngine::initPipelines() {
 		.disableDepthTest()
 		.setColorAttachmentFormat(m_drawImage.imageFormat);
 
+	VkPushConstantRange bufferRange{};
+	bufferRange.offset = 0;
+	bufferRange.size = sizeof(GPUDrawPushConstants);
+	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::graphicsPipelineLayoutCreateInfo();
+	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+
+	VK_CHECK(m_device.createPipelineLayout(m_meshPipeline, pipelineLayoutInfo));
 	VK_CHECK(m_device.createGraphicsPipeline(m_meshPipeline));
+
+	VK_CHECK(m_device.destroyShader(m_vertexShader));
+	VK_CHECK(m_device.destroyShader(m_fragmentShader));
 }
 
 // TEMP: this should be the entry point of the engine for the user code
@@ -47,7 +69,7 @@ void VkEngine::run() {
 
 		startFrame();
 
-		drawTest();
+		drawGeometryTest();
 
 		endFrame();
 	}
@@ -68,7 +90,6 @@ void VkEngine::startFrame() {
 
 	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	VK_CHECK(vkBeginCommandBuffer(currentCmd(), &cmdBeginInfo));
-	vkutil::makeWriteable(currentCmd(), m_drawImage);
 }
 
 void VkEngine::endFrame() {
@@ -91,7 +112,122 @@ void VkEngine::endFrame() {
 	m_frame++;
 }
 
-void VkEngine::drawTest() {}
+void VkEngine::drawGeometryTest() {
+	// preparation
+	VkCommandBuffer cmd = currentCmd();
+
+	vkutil::makeColorWriteable(cmd, m_drawImage);
+	VkRenderingAttachmentInfo colorAttachment = vkinit::attachmentInfo(m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VkRenderingInfo renderInfo = vkinit::renderingInfo(m_drawExtent, &colorAttachment, nullptr);
+
+	vkCmdBeginRendering(cmd, &renderInfo);
+
+	vkutil::setViewport(cmd, m_drawExtent);
+	vkutil::setScissor(cmd, m_drawExtent);
+
+	// draw
+	GPUDrawPushConstants push_constants;
+	push_constants.worldMatrix = glm::mat4{1.f};
+	push_constants.vertexBuffer = m_testMesh.vertexBufferAddress;
+
+	m_meshPipeline.bind(cmd);
+	m_meshPipeline.pushConstants(cmd, &push_constants);
+	vkCmdBindIndexBuffer(cmd, m_testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+	vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+
+	vkCmdEndRendering(cmd);
+}
+
+void VkEngine::drawComputeTest() { vkutil::makeWriteable(currentCmd(), m_drawImage); }
+
+void VkEngine::initTestData() {
+	std::array<Vertex, 4> rect_vertices;
+
+	rect_vertices[0].position = {0.5, -0.5, 0};
+	rect_vertices[1].position = {0.5, 0.5, 0};
+	rect_vertices[2].position = {-0.5, -0.5, 0};
+	rect_vertices[3].position = {-0.5, 0.5, 0};
+
+	rect_vertices[0].color = {0, 0, 0, 1};
+	rect_vertices[1].color = {0.5, 0.5, 0.5, 1};
+	rect_vertices[2].color = {1, 0, 0, 1};
+	rect_vertices[3].color = {0, 1, 0, 1};
+
+	std::array<uint32_t, 6> rect_indices = {0, 1, 2, 2, 1, 3};
+
+	m_testMesh = uploadMesh(rect_indices, rect_vertices);
+}
+
+void VkEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
+	VkCommandBuffer cmd = m_immData._commandBuffer;
+
+	VK_CHECK(vkResetFences(m_device.getDevice(), 1, &m_immData._fence));
+	VK_CHECK(vkResetCommandBuffer(cmd, 0));
+
+	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+	function(cmd);
+
+	VK_CHECK(vkEndCommandBuffer(cmd));
+
+	VkCommandBufferSubmitInfo cmdinfo = vkinit::commandBufferSubmitInfo(cmd);
+	VkSubmitInfo2 submit = vkinit::submitInfo(&cmdinfo, nullptr, nullptr);
+
+	VK_CHECK(m_device.submitCommand(1, &submit, m_immData._fence));
+	VK_CHECK(vkWaitForFences(m_device.getDevice(), 1, &m_immData._fence, true, 9999999999));
+}
+
+GPUMeshBuffers VkEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
+	const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+	const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
+
+	GPUMeshBuffers newSurface;
+	VK_CHECK(m_device.createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+								   VMA_MEMORY_USAGE_GPU_ONLY, &newSurface.indexBuffer));
+
+	VK_CHECK(m_device.createBuffer(vertexBufferSize,
+								   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+									   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+								   VMA_MEMORY_USAGE_GPU_ONLY, &newSurface.vertexBuffer));
+
+	VkBufferDeviceAddressInfo deviceAdressInfo{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = newSurface.vertexBuffer.buffer,
+	};
+
+	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(m_device.getDevice(), &deviceAdressInfo);
+
+	AllocatedBuffer staging;
+	void* data;
+
+	VK_CHECK(m_device.createStagingBuffer(vertexBufferSize + indexBufferSize, &staging, data));
+
+	memcpy(data, vertices.data(), vertexBufferSize);
+	memcpy((char*)data + vertexBufferSize, indices.data(), indexBufferSize);
+
+	immediateSubmit([&](VkCommandBuffer cmd) {
+		VkBufferCopy vertexCopy{
+			.srcOffset = 0,
+			.dstOffset = 0,
+			.size = vertexBufferSize,
+		};
+
+		VkBufferCopy indexCopy{
+			.srcOffset = vertexBufferSize,
+			.dstOffset = 0,
+			.size = indexBufferSize,
+		};
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+	});
+
+	VK_CHECK(m_device.destroyBuffer(&staging));
+
+	return newSurface;
+}
 
 void VkEngine::destroy() {
 	if (!m_initiliazed)

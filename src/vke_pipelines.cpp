@@ -1,9 +1,10 @@
 #include "vke_pipelines.hpp"
 #include "vke_device.hpp"
+#include "vke_initializers.hpp"
 
 namespace vke {
 
-VkeGraphicsPipeline VkeGraphicsPipeline::init() {
+VkeGraphicsPipeline::VkeGraphicsPipeline() {
 	m_shaderStages.clear();
 	m_pipelineLayout = {};
 	m_colorBlendAttachment = {};
@@ -17,19 +18,17 @@ VkeGraphicsPipeline VkeGraphicsPipeline::init() {
 	m_depthStencil = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
 
 	m_renderInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-
-	return *this;
 }
 
 VkGraphicsPipelineCreateInfo VkeGraphicsPipeline::buildPipelineInfo() {
-	VkPipelineViewportStateCreateInfo viewportState = {
+	auto viewportState = new VkPipelineViewportStateCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 		.pNext = nullptr,
 		.viewportCount = 1,
 		.scissorCount = 1,
 	};
 
-	VkPipelineColorBlendStateCreateInfo colorBlending = {
+	auto colorBlending = new VkPipelineColorBlendStateCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		.pNext = nullptr,
 		.logicOpEnable = VK_FALSE,
@@ -38,10 +37,14 @@ VkGraphicsPipelineCreateInfo VkeGraphicsPipeline::buildPipelineInfo() {
 		.pAttachments = &m_colorBlendAttachment,
 	};
 
-	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+	auto vertexInputInfo =
+		new VkPipelineVertexInputStateCreateInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 
-	VkDynamicState state[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-	VkPipelineDynamicStateCreateInfo dynamicState = {
+	VkDynamicState* state = new VkDynamicState[2];
+	state[0] = VK_DYNAMIC_STATE_VIEWPORT;
+	state[1] = VK_DYNAMIC_STATE_SCISSOR;
+
+	auto dynamicState = new VkPipelineDynamicStateCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
 		.dynamicStateCount = 2,
 		.pDynamicStates = &state[0],
@@ -52,52 +55,83 @@ VkGraphicsPipelineCreateInfo VkeGraphicsPipeline::buildPipelineInfo() {
 		.pNext = &m_renderInfo,
 		.stageCount = (uint32_t)m_shaderStages.size(),
 		.pStages = m_shaderStages.data(),
-		.pVertexInputState = &vertexInputInfo,
+		.pVertexInputState = vertexInputInfo,
 		.pInputAssemblyState = &m_inputAssembly,
-		.pViewportState = &viewportState,
+		.pViewportState = viewportState,
 		.pRasterizationState = &m_rasterizer,
 		.pMultisampleState = &m_multisampling,
 		.pDepthStencilState = &m_depthStencil,
-		.pColorBlendState = &colorBlending,
-		.pDynamicState = &dynamicState,
+		.pColorBlendState = colorBlending,
+		.pDynamicState = dynamicState,
 		.layout = m_pipelineLayout,
 	};
 
 	return pipelineInfo;
 }
 
-VkeGraphicsPipeline VkeGraphicsPipeline::setPipelineLayout(VkPipelineLayout layout) {
-	m_pipelineLayout = layout;
+void VkeGraphicsPipeline::bind(VkCommandBuffer cmd) { vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline); }
+
+void VkeGraphicsPipeline::pushConstants(VkCommandBuffer cmd, GPUDrawPushConstants* constants) {
+	vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), constants);
+}
+
+VkeGraphicsPipeline& VkeGraphicsPipeline::setShaders(VkeShader& vertexShader, VkeShader& fragmentShader) {
+	m_shaderStages.clear();
+	m_shaderStages.push_back(vkinit::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertexShader.getModule()));
+	m_shaderStages.push_back(vkinit::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader.getModule()));
 	return *this;
 }
 
-VkeGraphicsPipeline VkeGraphicsPipeline::setShaders(VkeShader& vertexShader, VkeShader& fragmentShader) { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::setInputTopology(VkPrimitiveTopology topology) {
+	m_inputAssembly.topology = topology;
+	m_inputAssembly.primitiveRestartEnable = VK_FALSE;
+	return *this;
+}
 
-VkeGraphicsPipeline VkeGraphicsPipeline::setInputTopology(VkPrimitiveTopology topology) { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::setPolygonMode(VkPolygonMode mode) {
+	m_rasterizer.polygonMode = mode;
+	m_rasterizer.lineWidth = 1.0f;
+	return *this;
+}
 
-VkeGraphicsPipeline VkeGraphicsPipeline::setPolygonMode(VkPolygonMode mode) { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::setCullMode(VkCullModeFlags mode, VkFrontFace frontFace) {
+	m_rasterizer.cullMode = mode;
+	m_rasterizer.frontFace = frontFace;
+	return *this;
+}
 
-VkeGraphicsPipeline VkeGraphicsPipeline::setCullMode(VkCullModeFlags mode, VkFrontFace frontFace) { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::setMultisamplingNone() {
+	m_multisampling.sampleShadingEnable = VK_FALSE;
+	m_multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	m_multisampling.minSampleShading = 1.0f;
+	m_multisampling.pSampleMask = nullptr;
+	m_multisampling.alphaToCoverageEnable = VK_FALSE;
+	m_multisampling.alphaToOneEnable = VK_FALSE;
+	return *this;
+}
 
-VkeGraphicsPipeline VkeGraphicsPipeline::setMultisamplingNone() { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::disableBlending() {
+	m_colorBlendAttachment.colorWriteMask =
+		VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	m_colorBlendAttachment.blendEnable = VK_FALSE;
+	return *this;
+}
 
-VkeGraphicsPipeline VkeGraphicsPipeline::disableBlending() { return *this; }
-
-VkeGraphicsPipeline VkeGraphicsPipeline::setColorAttachmentFormat(VkFormat format) {
+VkeGraphicsPipeline& VkeGraphicsPipeline::setColorAttachmentFormat(VkFormat format) {
 	m_colorAttachmentFormat = format;
 	m_renderInfo.colorAttachmentCount = 1;
 	m_renderInfo.pColorAttachmentFormats = &m_colorAttachmentFormat;
 	return *this;
 }
 
-VkeGraphicsPipeline VkeGraphicsPipeline::setDepthFormat(VkFormat format) {
+VkeGraphicsPipeline& VkeGraphicsPipeline::setDepthFormat(VkFormat format) {
 	m_renderInfo.depthAttachmentFormat = format;
 	return *this;
 }
 
-VkeGraphicsPipeline VkeGraphicsPipeline::enableDepthTest(bool enable, VkCompareOp op) { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::enableDepthTest(bool enable, VkCompareOp op) { return *this; }
 
-VkeGraphicsPipeline VkeGraphicsPipeline::disableDepthTest() {
+VkeGraphicsPipeline& VkeGraphicsPipeline::disableDepthTest() {
 	m_depthStencil.depthTestEnable = VK_FALSE;
 	m_depthStencil.depthWriteEnable = VK_FALSE;
 	m_depthStencil.depthCompareOp = VK_COMPARE_OP_NEVER;
@@ -112,8 +146,8 @@ VkeGraphicsPipeline VkeGraphicsPipeline::disableDepthTest() {
 	return *this;
 }
 
-VkeGraphicsPipeline VkeGraphicsPipeline::enableBlendingAdditive() { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::enableBlendingAdditive() { return *this; }
 
-VkeGraphicsPipeline VkeGraphicsPipeline::enableBlendingAlphablend() { return *this; }
+VkeGraphicsPipeline& VkeGraphicsPipeline::enableBlendingAlphablend() { return *this; }
 
 } // namespace vke
