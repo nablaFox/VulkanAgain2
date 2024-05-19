@@ -177,6 +177,15 @@ VkPipelineLayoutCreateInfo graphicsPipelineLayoutCreateInfo() {
 	return info;
 }
 
+VkPipelineLayoutCreateInfo computePipelineLayoutCreateInfo() {
+	VkPipelineLayoutCreateInfo computeLayout{};
+	computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	computeLayout.pNext = nullptr;
+	computeLayout.pSetLayouts = nullptr;
+	computeLayout.setLayoutCount = 0;
+	return computeLayout;
+}
+
 VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo(VkShaderStageFlagBits stage, VkShaderModule shaderModule,
 															  const char* entry) {
 	VkPipelineShaderStageCreateInfo info = {};

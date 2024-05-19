@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vke_descriptors.hpp"
 #include "vke_pipelines.hpp"
 #include "vke_utils.hpp"
 #include "vke_window.hpp"
@@ -35,12 +36,14 @@ public:
 	VkResult destroyShader(VkeShader& shader);
 	VkResult createPipelineLayout(VkePipeline& pipeline, VkPipelineLayoutCreateInfo& layoutInfo);
 	VkResult createGraphicsPipeline(VkeGraphicsPipeline& pipeline);
+	VkResult createComputePipeline(VkeComputePipeline& pipeline);
 	VkResult createDrawImage(VkExtent2D extent, AllocatedImage* image);
 	VkResult submitCommand(int submitCount, VkSubmitInfo2* submitInfo, VkFence fence = VK_NULL_HANDLE);
 	VkResult createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer* buffer,
 						  bool temp = false);
 	VkResult createStagingBuffer(size_t allocSize, AllocatedBuffer* buffer, void*& data);
 	VkResult destroyBuffer(AllocatedBuffer* buffer);
+	VkResult allocateDescriptorSet(VkeDescriptorSet* descriptorSet);
 
 private:
 	VkInstance m_vkInstance;
@@ -50,6 +53,7 @@ private:
 	VkDevice m_device;
 
 	VmaAllocator m_allocator;
+	DescriptorAllocator m_descriptorAllocator;
 
 	VkQueue m_graphicsQueue;
 	uint32_t m_graphicsQueueFamily;

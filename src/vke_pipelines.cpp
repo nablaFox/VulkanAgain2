@@ -4,10 +4,30 @@
 
 namespace vke {
 
+VkePipeline::VkePipeline() {
+	m_pipeline = VK_NULL_HANDLE;
+	m_pipelineLayout = {};
+}
+
+void VkePipeline::pushConstants(VkCommandBuffer cmd, GPUDrawPushConstants* constants, VkShaderStageFlags stage) {
+	vkCmdPushConstants(cmd, m_pipelineLayout, stage, 0, sizeof(GPUDrawPushConstants), constants);
+}
+
+VkePipeline& VkePipeline::setDescriptorSet(VkeDescriptorSet& descriptorSet) {
+	m_descriptorLayouts.push_back(&descriptorSet.m_descriptorSetLayout);
+	m_descriptorSets.push_back(&descriptorSet.m_descriptorSet);
+
+	m_pipelineLayoutInfo.setLayoutCount = (uint32_t)m_descriptorLayouts.size();
+	m_pipelineLayoutInfo.pSetLayouts = *(m_descriptorLayouts.data());
+
+	return *this;
+}
+
+// Graphics Pipeline
 VkeGraphicsPipeline::VkeGraphicsPipeline() {
 	m_shaderStages.clear();
-	m_pipelineLayout = {};
 	m_colorBlendAttachment = {};
+	m_pipelineLayoutInfo = vkinit::graphicsPipelineLayoutCreateInfo();
 
 	m_inputAssembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
 
@@ -20,59 +40,12 @@ VkeGraphicsPipeline::VkeGraphicsPipeline() {
 	m_renderInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
 }
 
-VkGraphicsPipelineCreateInfo VkeGraphicsPipeline::buildPipelineInfo() {
-	auto viewportState = new VkPipelineViewportStateCreateInfo{
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-		.pNext = nullptr,
-		.viewportCount = 1,
-		.scissorCount = 1,
-	};
+void VkeGraphicsPipeline::bind(VkCommandBuffer cmd) {
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 
-	auto colorBlending = new VkPipelineColorBlendStateCreateInfo{
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		.pNext = nullptr,
-		.logicOpEnable = VK_FALSE,
-		.logicOp = VK_LOGIC_OP_COPY,
-		.attachmentCount = 1,
-		.pAttachments = &m_colorBlendAttachment,
-	};
-
-	auto vertexInputInfo =
-		new VkPipelineVertexInputStateCreateInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-
-	VkDynamicState* state = new VkDynamicState[2];
-	state[0] = VK_DYNAMIC_STATE_VIEWPORT;
-	state[1] = VK_DYNAMIC_STATE_SCISSOR;
-
-	auto dynamicState = new VkPipelineDynamicStateCreateInfo{
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-		.dynamicStateCount = 2,
-		.pDynamicStates = &state[0],
-	};
-
-	VkGraphicsPipelineCreateInfo pipelineInfo = {
-		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-		.pNext = &m_renderInfo,
-		.stageCount = (uint32_t)m_shaderStages.size(),
-		.pStages = m_shaderStages.data(),
-		.pVertexInputState = vertexInputInfo,
-		.pInputAssemblyState = &m_inputAssembly,
-		.pViewportState = viewportState,
-		.pRasterizationState = &m_rasterizer,
-		.pMultisampleState = &m_multisampling,
-		.pDepthStencilState = &m_depthStencil,
-		.pColorBlendState = colorBlending,
-		.pDynamicState = dynamicState,
-		.layout = m_pipelineLayout,
-	};
-
-	return pipelineInfo;
-}
-
-void VkeGraphicsPipeline::bind(VkCommandBuffer cmd) { vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline); }
-
-void VkeGraphicsPipeline::pushConstants(VkCommandBuffer cmd, GPUDrawPushConstants* constants) {
-	vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), constants);
+	if (!m_descriptorSets.empty())
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, m_descriptorSets.size(),
+								*m_descriptorSets.data(), 0, nullptr);
 }
 
 VkeGraphicsPipeline& VkeGraphicsPipeline::setShaders(VkeShader& vertexShader, VkeShader& fragmentShader) {
@@ -150,4 +123,36 @@ VkeGraphicsPipeline& VkeGraphicsPipeline::enableBlendingAdditive() { return *thi
 
 VkeGraphicsPipeline& VkeGraphicsPipeline::enableBlendingAlphablend() { return *this; }
 
+VkeGraphicsPipeline& VkeGraphicsPipeline::setPushConstantRange(VkPushConstantRange& bufferRange, uint32_t count) {
+	m_pipelineLayoutInfo.pushConstantRangeCount = count;
+	m_pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
+	return *this;
+}
+
+// Compute Pipeline
+VkeComputePipeline::VkeComputePipeline() {
+	m_computeInfo = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+	m_pipelineLayoutInfo = vkinit::computePipelineLayoutCreateInfo();
+}
+
+void VkeComputePipeline::bind(VkCommandBuffer cmd) {
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
+
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, m_descriptorSets.size(),
+							*m_descriptorSets.data(), 0, nullptr);
+}
+
+VkeComputePipeline& VkeComputePipeline::setShader(VkeShader& computeShader) {
+	m_computeInfo.stage = vkinit::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, computeShader.getModule());
+	return *this;
+}
+
 } // namespace vke
+
+VkPushConstantRange vkutil::getPushConstantRange(VkShaderStageFlags stage, uint32_t size, uint32_t offset) {
+	return {
+		stage,
+		offset,
+		size,
+	};
+}

@@ -31,6 +31,12 @@ void VkEngine::init(GameEngineSettings settings) {
 void VkEngine::initPipelines() {
 	VK_CHECK(m_device.createShader(m_vertexShader, "shaders/basic.vert.spv"));
 	VK_CHECK(m_device.createShader(m_fragmentShader, "shaders/basic.frag.spv"));
+	VK_CHECK(m_device.createShader(m_computeShader, "shaders/basic.comp.spv"));
+
+	m_drawImageDescriptorSet.bindImage(m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL, VK_SHADER_STAGE_COMPUTE_BIT);
+	VK_CHECK(m_device.allocateDescriptorSet(&m_drawImageDescriptorSet));
+
+	auto bufferRange = vkutil::getPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(GPUDrawPushConstants));
 
 	m_meshPipeline.setShaders(m_vertexShader, m_fragmentShader)
 		.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
@@ -39,22 +45,17 @@ void VkEngine::initPipelines() {
 		.setMultisamplingNone()
 		.disableBlending()
 		.disableDepthTest()
-		.setColorAttachmentFormat(m_drawImage.imageFormat);
+		.setColorAttachmentFormat(m_drawImage.imageFormat)
+		.setPushConstantRange(bufferRange);
 
-	VkPushConstantRange bufferRange{};
-	bufferRange.offset = 0;
-	bufferRange.size = sizeof(GPUDrawPushConstants);
-	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	m_computePipeline.setShader(m_computeShader).setDescriptorSet(m_drawImageDescriptorSet);
 
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::graphicsPipelineLayoutCreateInfo();
-	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
-	pipelineLayoutInfo.pushConstantRangeCount = 1;
-
-	VK_CHECK(m_device.createPipelineLayout(m_meshPipeline, pipelineLayoutInfo));
 	VK_CHECK(m_device.createGraphicsPipeline(m_meshPipeline));
+	VK_CHECK(m_device.createComputePipeline(m_computePipeline));
 
 	VK_CHECK(m_device.destroyShader(m_vertexShader));
 	VK_CHECK(m_device.destroyShader(m_fragmentShader));
+	VK_CHECK(m_device.destroyShader(m_computeShader));
 }
 
 // TEMP: this should be the entry point of the engine for the user code
@@ -69,6 +70,7 @@ void VkEngine::run() {
 
 		startFrame();
 
+		// drawComputeTest();
 		drawGeometryTest();
 
 		endFrame();
@@ -139,7 +141,15 @@ void VkEngine::drawGeometryTest() {
 	vkCmdEndRendering(cmd);
 }
 
-void VkEngine::drawComputeTest() { vkutil::makeWriteable(currentCmd(), m_drawImage); }
+void VkEngine::drawComputeTest() {
+	VkCommandBuffer cmd = currentCmd();
+
+	vkutil::makeWriteable(cmd, m_drawImage);
+
+	m_computePipeline.bind(cmd);
+
+	vkCmdDispatch(cmd, m_drawImage.imageExtent.width, m_drawImage.imageExtent.height, 1);
+}
 
 void VkEngine::initTestData() {
 	std::array<Vertex, 4> rect_vertices;

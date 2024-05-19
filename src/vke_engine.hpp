@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vke_descriptors.hpp"
 #include "vke_device.hpp"
 #include "vke_types.hpp"
 #include "vke_utils.hpp"
@@ -72,6 +73,8 @@ private:
 	VkeShader m_computeShader;
 
 	ImmediateData m_immData;
+
+	VkeDescriptorSet m_drawImageDescriptorSet;
 
 private:
 	void startFrame();

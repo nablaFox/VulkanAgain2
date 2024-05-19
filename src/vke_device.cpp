@@ -60,7 +60,17 @@ VkResult VkeDevice::init(VkeWindow* window) {
 
 	VK_RETURN(vmaCreateAllocator(&allocatorInfo, &m_allocator));
 
-	m_deletionQueue.push_function([this] { vmaDestroyAllocator(m_allocator); });
+	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+	};
+
+	m_descriptorAllocator.initPool(m_device, 10, sizes);
+
+	m_deletionQueue.push_function([this] {
+		vmaDestroyAllocator(m_allocator);
+		m_descriptorAllocator.clearDescriptors(m_device);
+		m_descriptorAllocator.destroyPoll(m_device);
+	});
 
 	return VK_SUCCESS;
 }
@@ -131,17 +141,71 @@ VkResult VkeDevice::destroyShader(VkeShader& shader) {
 
 VkResult VkeDevice::createPipelineLayout(VkePipeline& pipeline, VkPipelineLayoutCreateInfo& layoutInfo) {
 	VK_RETURN(vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &pipeline.m_pipelineLayout));
+
+	m_deletionQueue.push_function([this, &pipeline] { vkDestroyPipelineLayout(m_device, pipeline.m_pipelineLayout, nullptr); });
+
 	return VK_SUCCESS;
 }
 
 VkResult VkeDevice::createGraphicsPipeline(VkeGraphicsPipeline& pipeline) {
-	VkGraphicsPipelineCreateInfo pipelineInfo = pipeline.buildPipelineInfo();
+	VK_RETURN(createPipelineLayout(pipeline, pipeline.m_pipelineLayoutInfo));
+
+	VkPipelineViewportStateCreateInfo viewportState = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		.pNext = nullptr,
+		.viewportCount = 1,
+		.scissorCount = 1,
+	};
+
+	VkPipelineColorBlendStateCreateInfo colorBlending = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		.pNext = nullptr,
+		.logicOpEnable = VK_FALSE,
+		.logicOp = VK_LOGIC_OP_COPY,
+		.attachmentCount = 1,
+		.pAttachments = &pipeline.m_colorBlendAttachment,
+	};
+
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+
+	VkDynamicState state[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+
+	VkPipelineDynamicStateCreateInfo dynamicState = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		.dynamicStateCount = 2,
+		.pDynamicStates = state,
+	};
+
+	VkGraphicsPipelineCreateInfo pipelineInfo = {
+		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+		.pNext = &pipeline.m_renderInfo,
+		.stageCount = (uint32_t)pipeline.m_shaderStages.size(),
+		.pStages = pipeline.m_shaderStages.data(),
+		.pVertexInputState = &vertexInputInfo,
+		.pInputAssemblyState = &pipeline.m_inputAssembly,
+		.pViewportState = &viewportState,
+		.pRasterizationState = &pipeline.m_rasterizer,
+		.pMultisampleState = &pipeline.m_multisampling,
+		.pDepthStencilState = &pipeline.m_depthStencil,
+		.pColorBlendState = &colorBlending,
+		.pDynamicState = &dynamicState,
+		.layout = pipeline.m_pipelineLayout,
+	};
+
 	VK_RETURN(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.m_pipeline));
 
-	m_deletionQueue.push_function([this, &pipeline] {
-		vkDestroyPipeline(m_device, pipeline.m_pipeline, nullptr);
-		vkDestroyPipelineLayout(m_device, pipeline.m_pipelineLayout, nullptr);
-	});
+	m_deletionQueue.push_function([this, &pipeline] { vkDestroyPipeline(m_device, pipeline.m_pipeline, nullptr); });
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::createComputePipeline(VkeComputePipeline& pipeline) {
+	VK_RETURN(createPipelineLayout(pipeline, pipeline.m_pipelineLayoutInfo));
+
+	pipeline.m_computeInfo.layout = pipeline.m_pipelineLayout;
+	VK_RETURN(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &pipeline.m_computeInfo, nullptr, &pipeline.m_pipeline));
+
+	m_deletionQueue.push_function([this, &pipeline] { vkDestroyPipeline(m_device, pipeline.m_pipeline, nullptr); });
 
 	return VK_SUCCESS;
 }
@@ -203,8 +267,13 @@ VkResult VkeDevice::createBuffer(size_t allocSize, VkBufferUsageFlags usage, Vma
 
 	VK_RETURN(vmaCreateBuffer(m_allocator, &bufferInfo, &vmaallocInfo, &buffer->buffer, &buffer->allocation, &buffer->info));
 
-	if (!temp)
-		m_deletionQueue.push_function([this, &buffer] { destroyBuffer(buffer); });
+	if (!temp) {
+		auto bufferPtr = new AllocatedBuffer(*buffer);
+		m_deletionQueue.push_function([this, bufferPtr]() {
+			destroyBuffer(bufferPtr);
+			delete bufferPtr;
+		});
+	}
 
 	return VK_SUCCESS;
 }
@@ -217,6 +286,15 @@ VkResult VkeDevice::createStagingBuffer(size_t allocSize, AllocatedBuffer* stagi
 
 VkResult VkeDevice::destroyBuffer(AllocatedBuffer* buffer) {
 	vmaDestroyBuffer(m_allocator, buffer->buffer, buffer->allocation);
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::allocateDescriptorSet(VkeDescriptorSet* descriptorSet) {
+	VK_RETURN(m_descriptorAllocator.allocate(m_device, descriptorSet));
+
+	m_deletionQueue.push_function(
+		[this, descriptorSet] { vkDestroyDescriptorSetLayout(m_device, descriptorSet->m_descriptorSetLayout, nullptr); });
+
 	return VK_SUCCESS;
 }
 

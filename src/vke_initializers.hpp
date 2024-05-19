@@ -30,6 +30,7 @@ VkRenderingAttachmentInfo depthAttachmentInfo(VkImageView view,
 											  VkImageLayout layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
 VkPipelineLayoutCreateInfo graphicsPipelineLayoutCreateInfo();
+VkPipelineLayoutCreateInfo computePipelineLayoutCreateInfo();
 
 VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo(VkShaderStageFlagBits stage, VkShaderModule shaderModule,
 															  const char* entry = "main");
