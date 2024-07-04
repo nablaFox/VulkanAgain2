@@ -1,13 +1,13 @@
-#include "vke_engine.hpp"
+#include "demo_application.hpp"
 
 int main(int argc, char* argv[]) {
-	vke::VkEngine engine;
+	DemoApplication app;
 
-	engine.init();
+	app.init();
 
-	engine.run();
+	app.run();
 
-	engine.destroy();
+	app.destroy();
 
 	return 0;
 }

@@ -7,6 +7,8 @@
 #include "vke_window.hpp"
 #include "vke_pipelines.hpp"
 
+#include "vke_scene.hpp"
+
 namespace vke {
 
 struct GameEngineSettings {
@@ -45,6 +47,18 @@ public:
 	void drawComputeTest();
 	void initTestData();
 
+	template <typename T>
+	typename std::enable_if<is_vke_system<T>::value>::type registerSystem() {
+		m_systemManager.registerSystem(std::make_unique<T>(), this);
+	}
+
+	template <typename T>
+	typename std::enable_if<is_vke_scene<T>::value>::type registerScene(const std::string& name) {
+		m_sceneManager.registerScene(name, std::make_unique<T>());
+	}
+
+	void switchScene(const std::string& name) { m_sceneManager.switchScene(name); }
+
 	GPUMeshBuffers m_testMesh;
 	AllocatedImage m_whiteTexture;
 	AllocatedImage m_checkboardTexture;
@@ -77,11 +91,29 @@ private:
 	VkeDescriptor m_globalSceneDescriptor;
 	VkeDescriptor m_materialDescriptor;
 
+	VkeSystemManager m_systemManager;
+	VkeSceneManager m_sceneManager{m_systemManager};
+
 private:
 	void startFrame();
 	void endFrame();
 
 	void initPipelines();
+};
+
+// TEMP: find a better way to define multiple projects/applications
+class Application : public VkEngine {
+public:
+	virtual void setup() = 0;
+
+	void run() { VkEngine::run(); }
+
+	void init(GameEngineSettings settings = VkEngine::defaultSettings) {
+		VkEngine::init(settings);
+		setup();
+	}
+
+	void destroy() { VkEngine::destroy(); }
 };
 
 } // namespace vke

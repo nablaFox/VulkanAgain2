@@ -5,7 +5,7 @@ SHADERS_PATH = shaders
 DEMO_PATH = demos/general_demo
 
 # libs
-LIBS_INCLUDE = glm glfw/include vkbootstrap vma/include stb_image fastgltf fastgltf/include fmt/include
+LIBS_INCLUDE = glm glfw/include vkbootstrap vma/include stb_image fastgltf fastgltf/include fmt/include entt
 LIBS_BIN = lib/glfw/src/libglfw3.a lib/fmt/libfmt.a lib/fastgltf/libfastgltf.a
 
 # tool
