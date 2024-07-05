@@ -3,17 +3,14 @@
 
 using namespace vke;
 
-void VkeSystemManager::registerSystem(std::unique_ptr<VkeSystem> system, VkEngine* engine) {
-	system->m_engine = engine;
-	systems.push_back(std::move(system));
-}
-
 void VkeSystemManager::updateAll(float deltaTime) {
 	for (auto& system : systems)
 		system->update(deltaTime);
 }
 
-void VkeSystemManager::updateEntities(entt::registry& entities) {
-	for (auto& system : systems)
-		system->m_entities = &entities;
+void VkeSystemManager::awakeAll() {
+	for (auto& system : systems) {
+		system->m_entities = &m_sceneManager.currentScene->m_entities;
+		system->awake();
+	}
 }

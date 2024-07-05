@@ -4,24 +4,9 @@
 
 using namespace vke;
 
-void VkeScene::load() {
-	fmt::println("Loading '{}' scene", name);
-	//
-}
-
 void VkeScene::removeEntity(entt::entity entity) { m_entities.destroy(entity); }
 
-void VkeSceneManager::update(float deltaTime) {
-	if (!currentScene)
-		return;
-
-	systemManager.updateAll(deltaTime);
-}
-
-void VkeSceneManager::registerScene(std::string name, std::unique_ptr<VkeScene> scene) {
-	scene->name = name;
-	scenes[name] = std::move(scene);
-}
+void VkeSceneManager::switchScene(std::unique_ptr<VkeScene> scene) { currentScene = std::move(scene); }
 
 void VkeSceneManager::switchScene(const std::string& name) {
 	if (currentScene != nullptr && currentScene->name == name) {
@@ -30,10 +15,5 @@ void VkeSceneManager::switchScene(const std::string& name) {
 	}
 
 	fmt::println("Switching to '{}' scene", name);
-
-	currentScene = std::move(scenes[name]);
-	currentScene->load();
-	currentScene->setup();
-
-	systemManager.updateEntities(currentScene->m_entities);
+	currentScene = assets[name];
 }

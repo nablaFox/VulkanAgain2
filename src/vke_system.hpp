@@ -1,10 +1,6 @@
 #pragma once
 
-#include <entt.hpp>
-#include <vector>
-#include <unordered_map>
-#include <memory>
-#include <string>
+#include "vke_scene.hpp"
 
 namespace vke {
 
@@ -32,19 +28,24 @@ protected:
 
 class VkeSystemManager {
 public:
-	void registerSystem(std::unique_ptr<VkeSystem> system, VkEngine* engine);
+	VkeSystemManager(VkeSceneManager& sceneManager) : m_sceneManager(sceneManager) {}
+
+	template <typename T>
+	void registerSystem(VkEngine* engine) {
+		auto system = std::make_unique<T>();
+		system->m_engine = engine;
+		systems.push_back(std::move(system));
+	}
 
 	void updateAll(float deltaTime);
-
-	void updateEntities(entt::registry& entities);
+	void awakeAll();
 
 private:
 	std::vector<std::unique_ptr<VkeSystem>> systems;
+	VkeSceneManager& m_sceneManager;
 };
 
 template <typename T>
-struct is_vke_system {
-	static constexpr bool value = std::is_base_of<VkeSystem, T>::value;
-};
+using enable_if_vke_sys_t = std::enable_if_t<std::is_base_of_v<VkeSystem, T>>;
 
 } // namespace vke

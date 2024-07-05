@@ -1,11 +1,11 @@
 AddTask(0, {
-	cmd = 'make shaders demo && bin/demo',
-})
-
-AddTask(1, {
-	cmd = 'make shaders',
+	cmd = 'make && bin/VulkanAgain2',
 })
 
 AddTask(3, {
 	cmd = 'make clean'
+})
+
+AddTask(2, {
+	cmd = 'bin/VulkanAgain2',
 })

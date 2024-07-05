@@ -103,7 +103,8 @@ void VkEngine::run() {
 		startFrame();
 
 		// drawGeometryTest();
-		m_sceneManager.update(0.0f);
+		// m_sceneManager.update(0.0f);
+		m_systemManager.updateAll(0.0f);
 
 		endFrame();
 	}

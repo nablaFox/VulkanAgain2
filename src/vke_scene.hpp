@@ -1,17 +1,22 @@
 #pragma once
 
-#include "vke_system.hpp"
+#include <entt.hpp>
+#include <vector>
+#include <unordered_map>
+#include <memory>
+#include <string>
+
+#include "vke_asset.hpp"
 
 namespace vke {
 
 class VkEngine;
 
-class VkeScene {
+class VkeScene : public VkeAsset {
 	friend class VkeSceneManager;
+	friend class VkeSystemManager;
 
 public:
-	void load(); // load scene resources
-
 	entt::entity addEntity() { return m_entities.create(); }
 
 	template <typename T, typename... Args>
@@ -28,35 +33,23 @@ public:
 
 	void removeEntity(entt::entity entity);
 
-	virtual void setup() = 0; // let the user setup the scene (add entities, etc)
-
 protected:
 	entt::registry m_entities;
-	std::string name;
 };
 
-class VkeSceneManager {
+class VkeSceneManager : public VkeAssetManager<VkeScene> {
+	friend class VkeSystemManager;
+
 public:
-	VkeSceneManager(VkeSystemManager& systemManager) : systemManager(systemManager) {}
-
-	void update(float deltaTime);
-
-	void registerScene(std::string name, std::unique_ptr<VkeScene> scene);
-
 	void switchScene(const std::string& name);
 
-public:
-	VkeScene& getCurrentScene() { return *currentScene; }
+	void switchScene(std::unique_ptr<VkeScene> scene);
 
 private:
-	std::unordered_map<std::string, std::unique_ptr<VkeScene>> scenes;
-	std::unique_ptr<VkeScene> currentScene;
-	VkeSystemManager& systemManager;
+	std::shared_ptr<VkeScene> currentScene;
 };
 
 template <typename T>
-struct is_vke_scene {
-	static constexpr bool value = std::is_base_of<VkeScene, T>::value;
-};
+using enable_if_vke_scene_t = std::enable_if_t<std::is_base_of_v<VkeScene, T>>;
 
 } // namespace vke

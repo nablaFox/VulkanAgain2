@@ -7,6 +7,7 @@
 #include "vke_window.hpp"
 #include "vke_pipelines.hpp"
 
+#include "vke_system.hpp"
 #include "vke_scene.hpp"
 
 namespace vke {
@@ -31,6 +32,8 @@ struct FrameData {
 };
 
 class VkEngine {
+	friend class Application;
+
 public:
 	static constexpr GameEngineSettings defaultSettings{};
 
@@ -48,13 +51,13 @@ public:
 	void initTestData();
 
 	template <typename T>
-	typename std::enable_if<is_vke_system<T>::value>::type registerSystem() {
-		m_systemManager.registerSystem(std::make_unique<T>(), this);
+	enable_if_vke_sys_t<T> registerSystem() {
+		m_systemManager.registerSystem<T>(this);
 	}
 
 	template <typename T>
-	typename std::enable_if<is_vke_scene<T>::value>::type registerScene(const std::string& name) {
-		m_sceneManager.registerScene(name, std::make_unique<T>());
+	enable_if_vke_scene_t<T> registerScene(const std::string& name) {
+		m_sceneManager.registerAsset<T>(name);
 	}
 
 	void switchScene(const std::string& name) { m_sceneManager.switchScene(name); }
@@ -91,8 +94,8 @@ private:
 	VkeDescriptor m_globalSceneDescriptor;
 	VkeDescriptor m_materialDescriptor;
 
-	VkeSystemManager m_systemManager;
-	VkeSceneManager m_sceneManager{m_systemManager};
+	VkeSceneManager m_sceneManager;
+	VkeSystemManager m_systemManager{m_sceneManager};
 
 private:
 	void startFrame();
@@ -111,6 +114,7 @@ public:
 	void init(GameEngineSettings settings = VkEngine::defaultSettings) {
 		VkEngine::init(settings);
 		setup();
+		m_systemManager.awakeAll();
 	}
 
 	void destroy() { VkEngine::destroy(); }

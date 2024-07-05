@@ -66,3 +66,13 @@ dkms.conf
 
 # TODO
 TODO
+
+# CMake
+
+CMakeFiles
+CMakeCache.txt
+CMakeScripts
+Testing
+CTestTestfile.cmake
+cmake_install.cmake
+install_manifest.txt

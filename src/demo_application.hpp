@@ -33,25 +33,20 @@ public:
 
 class DemoSystem : public VkeSystem {
 public:
-	void awake() override {
-		// setup entities
-	}
+	void awake() override { fmt::print("DemoSystem awake\n"); }
 
 	void update(float deltaTime) override {
-		auto view = getEntities<DemoComponent>();
-
 		int i = 0;
-		for (auto entity : view) {
-			auto& component = view.get<DemoComponent>(entity);
-			component.value1++;
+		getEntities<DemoComponent>().each([this, &i](auto& component) {
 			fmt::print("Entity {} DemoComponent value: {}\n", i, component.value1);
+			component.value1++;
 
-			if (component.value1 > 100) {
+			if (component.value1 % 2 == 0) {
 				m_engine->switchScene("scene2");
 			}
 
 			i++;
-		}
+		});
 	}
 };
 
