@@ -17,7 +17,7 @@ public:
 	void pushConstants(VkCommandBuffer cmd, GPUDrawPushConstants* constants,
 					   VkShaderStageFlags stage = VK_SHADER_STAGE_VERTEX_BIT);
 
-	VkePipeline& setDescriptorSet(VkeDescriptorSet& descriptorSet);
+	VkePipeline& setDescriptorSet(VkeDescriptor& descriptorSet);
 
 protected:
 	VkPipeline m_pipeline;

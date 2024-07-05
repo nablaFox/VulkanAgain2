@@ -22,7 +22,7 @@ struct VkeImage {
 
 struct AllocatedImage : VkeImage {
 	VmaAllocation allocation;
-	VkExtent2D imageExtent;
+	VkExtent3D imageExtent;
 	VkFormat imageFormat;
 };
 
@@ -51,6 +51,15 @@ struct Vertex {
 	glm::vec4 color;
 };
 
+struct GPUSceneData {
+	glm::mat4 view;
+	glm::mat4 proj;
+	glm::mat4 viewproj;
+	glm::vec4 ambientColor;
+	glm::vec4 sunlightDirection; // w for sun power
+	glm::vec4 sunlightColor;
+};
+
 #define VK_RETURN(x)                                                                                                             \
 	{                                                                                                                            \
 		VkResult err = x;                                                                                                        \
@@ -63,6 +72,6 @@ struct Vertex {
 		VkResult err = x;                                                                                                        \
 		if (err) {                                                                                                               \
 			fmt::print("Detected Vulkan Error: {}", string_VkResult(err));                                                       \
-			abort();                                                                                                             \
+			exit(err);                                                                                                           \
 		}                                                                                                                        \
 	} while (0)

@@ -4,38 +4,39 @@
 
 namespace vke {
 
-class VkeDescriptorSet {
+class VkeDescriptor {
 	friend class VkePipeline;
-	friend struct DescriptorAllocator;
+	friend struct VkeDescriptorAllocator;
 	friend class VkeDevice;
 
 public:
-	void bindImage(VkImageView imageView, VkSampler sampler, VkImageLayout layout, VkShaderStageFlags stage,
-				   uint32_t binding = 0);
-	void bindBuffer();
+	void addBinding(uint32_t binding, VkDescriptorType type);
+	void writeImage(uint32_t binding, VkImageView imageView, VkSampler sampler, VkImageLayout layout);
+	void writeBuffer(uint32_t binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
 
 private:
+	VkResult initLayout(VkDevice device, VkShaderStageFlags shaderStages);
+
 	VkDescriptorSet m_descriptorSet;
 	VkDescriptorSetLayout m_descriptorSetLayout;
 
 	std::vector<VkDescriptorSetLayoutBinding> m_bindings;
 	std::vector<VkDescriptorImageInfo> m_imageInfos;
+	std::vector<VkDescriptorBufferInfo> m_bufferInfos;
 	std::vector<VkWriteDescriptorSet> m_writes;
 };
 
-struct DescriptorAllocator {
+struct VkeDescriptorAllocator {
 	struct PoolSizeRatio {
 		VkDescriptorType type;
 		float ratio;
 	};
 
 	VkDescriptorPool m_pool;
-
-	void initPool(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios);
-	void clearDescriptors(VkDevice device);
+	VkResult initPool(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios);
+	VkResult resetDescriptorPool(VkDevice device);
+	VkResult allocate(VkDevice device, VkeDescriptor* descriptorSet);
 	void destroyPoll(VkDevice device);
-
-	VkResult allocate(VkDevice device, VkeDescriptorSet* descriptorSet);
 };
 
 } // namespace vke

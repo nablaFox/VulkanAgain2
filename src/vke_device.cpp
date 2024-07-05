@@ -1,5 +1,5 @@
-#include "vke_engine.hpp"
 #include "vke_device.hpp"
+#include "vke_images.hpp"
 #include "vke_initializers.hpp"
 
 #define VMA_IMPLEMENTATION
@@ -60,17 +60,11 @@ VkResult VkeDevice::init(VkeWindow* window) {
 
 	VK_RETURN(vmaCreateAllocator(&allocatorInfo, &m_allocator));
 
-	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
-		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
-	};
+	VK_RETURN(createCommandPool(&m_immData._commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+	VK_RETURN(allocateCommandBuffer(&m_immData._commandBuffer, m_immData._commandPool));
+	VK_RETURN(createFence(&m_immData._fence, VK_FENCE_CREATE_SIGNALED_BIT));
 
-	m_descriptorAllocator.initPool(m_device, 10, sizes);
-
-	m_deletionQueue.push_function([this] {
-		vmaDestroyAllocator(m_allocator);
-		m_descriptorAllocator.clearDescriptors(m_device);
-		m_descriptorAllocator.destroyPoll(m_device);
-	});
+	m_deletionQueue.push_function([this] { vmaDestroyAllocator(m_allocator); });
 
 	return VK_SUCCESS;
 }
@@ -102,19 +96,6 @@ VkResult VkeDevice::createFence(VkFence* fence, VkFenceCreateFlags flags) {
 	m_deletionQueue.push_function([this, fence] { vkDestroyFence(m_device, *fence, nullptr); });
 
 	return vkCreateFence(m_device, &fenceCreateInfo, nullptr, fence);
-}
-
-VkResult VkeDevice::initFrameData(FrameData* frame, int count) {
-	for (int i = 0; i < count; i++) {
-		VK_RETURN(createCommandPool(&frame[i]._commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
-		VK_RETURN(allocateCommandBuffer(&frame[i]._commandBuffer, frame[i]._commandPool));
-
-		VK_RETURN(createSemaphore(&frame[i]._swapchainSemaphore));
-		VK_RETURN(createSemaphore(&frame[i]._renderSemaphore));
-		VK_RETURN(createFence(&frame[i]._renderFence, VK_FENCE_CREATE_SIGNALED_BIT));
-	}
-
-	return VK_SUCCESS;
 }
 
 VkResult VkeDevice::createShader(VkeShader& shader, const char* path) {
@@ -218,7 +199,7 @@ VkResult VkeDevice::createDrawImage(VkExtent2D extent, AllocatedImage* image) {
 	};
 
 	image->imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-	image->imageExtent = extent;
+	image->imageExtent = drawImageExtent;
 
 	VkImageUsageFlags drawImageUsages{};
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -251,6 +232,80 @@ VkResult VkeDevice::submitCommand(int submitCount, VkSubmitInfo2* submitInfo, Vk
 	return VK_SUCCESS;
 }
 
+VkResult VkeDevice::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
+	VkCommandBuffer cmd = m_immData._commandBuffer;
+
+	VK_CHECK(vkResetFences(m_device, 1, &m_immData._fence));
+	VK_CHECK(vkResetCommandBuffer(cmd, 0));
+
+	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+	function(cmd);
+
+	VK_CHECK(vkEndCommandBuffer(cmd));
+
+	VkCommandBufferSubmitInfo cmdinfo = vkinit::commandBufferSubmitInfo(cmd);
+	VkSubmitInfo2 submit = vkinit::submitInfo(&cmdinfo, nullptr, nullptr);
+
+	VK_CHECK(submitCommand(1, &submit, m_immData._fence));
+	VK_CHECK(vkWaitForFences(m_device, 1, &m_immData._fence, true, 9999999999));
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::uploadMesh(GPUMeshBuffers* mesh, std::span<uint32_t> indices, std::span<Vertex> vertices) {
+	const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+	const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
+
+	GPUMeshBuffers newSurface;
+	VK_RETURN(createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+						   VMA_MEMORY_USAGE_GPU_ONLY, &newSurface.indexBuffer));
+
+	VK_RETURN(createBuffer(vertexBufferSize,
+						   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+							   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+						   VMA_MEMORY_USAGE_GPU_ONLY, &newSurface.vertexBuffer));
+
+	VkBufferDeviceAddressInfo deviceAdressInfo{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = newSurface.vertexBuffer.buffer,
+	};
+
+	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(m_device, &deviceAdressInfo);
+
+	AllocatedBuffer staging;
+	void* data;
+
+	VK_RETURN(createStagingBuffer(vertexBufferSize + indexBufferSize, &staging, data));
+
+	memcpy(data, vertices.data(), vertexBufferSize);
+	memcpy((char*)data + vertexBufferSize, indices.data(), indexBufferSize);
+
+	immediateSubmit([&](VkCommandBuffer cmd) {
+		VkBufferCopy vertexCopy{
+			.srcOffset = 0,
+			.dstOffset = 0,
+			.size = vertexBufferSize,
+		};
+
+		VkBufferCopy indexCopy{
+			.srcOffset = vertexBufferSize,
+			.dstOffset = 0,
+			.size = indexBufferSize,
+		};
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+	});
+
+	VK_RETURN(destroyBuffer(&staging));
+
+	*mesh = newSurface;
+
+	return VK_SUCCESS;
+}
+
 VkResult VkeDevice::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer* buffer,
 								 bool temp) {
 	VkBufferCreateInfo bufferInfo = {
@@ -278,6 +333,11 @@ VkResult VkeDevice::createBuffer(size_t allocSize, VkBufferUsageFlags usage, Vma
 	return VK_SUCCESS;
 }
 
+VkResult VkeDevice::fillBuffer(AllocatedBuffer* buffer, void* data, size_t size) {
+	memcpy(buffer->allocation->GetMappedData(), data, size);
+	return VK_SUCCESS;
+}
+
 VkResult VkeDevice::createStagingBuffer(size_t allocSize, AllocatedBuffer* staging, void*& data) {
 	VK_RETURN(createBuffer(allocSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY, staging, true));
 	data = staging->allocation->GetMappedData();
@@ -289,14 +349,130 @@ VkResult VkeDevice::destroyBuffer(AllocatedBuffer* buffer) {
 	return VK_SUCCESS;
 }
 
-VkResult VkeDevice::allocateDescriptorSet(VkeDescriptorSet* descriptorSet) {
-	VK_RETURN(m_descriptorAllocator.allocate(m_device, descriptorSet));
+VkResult VkeDevice::createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, AllocatedImage* handle,
+								bool mipmapped) {
+	handle->imageFormat = format;
+	handle->imageExtent = size;
+
+	VkImageCreateInfo imgInfo = vkinit::imageCreateInfo(format, usage, size);
+	if (mipmapped) {
+		imgInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
+	}
+
+	VmaAllocationCreateInfo allocInfo = {
+		.usage = VMA_MEMORY_USAGE_GPU_ONLY,
+		.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+	};
+
+	VK_RETURN(vmaCreateImage(m_allocator, &imgInfo, &allocInfo, &handle->image, &handle->allocation, nullptr));
+
+	VkImageAspectFlags aspectFlag = format == VK_FORMAT_D32_SFLOAT ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+	VkImageViewCreateInfo viewInfo = vkinit::imageViewCreateInfo(format, handle->image, aspectFlag);
+	viewInfo.subresourceRange.levelCount = imgInfo.mipLevels;
+
+	VK_RETURN(vkCreateImageView(m_device, &viewInfo, nullptr, &handle->imageView));
+
+	m_deletionQueue.push_function([this, handle] {
+		vkDestroyImageView(m_device, handle->imageView, nullptr);
+		vmaDestroyImage(m_allocator, handle->image, handle->allocation);
+	});
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::fillImage(AllocatedImage* image, void* data) {
+	size_t imageSize = image->imageExtent.width * image->imageExtent.height * image->imageExtent.depth * 4;
+
+	AllocatedBuffer stagingBuffer;
+	VK_RETURN(createStagingBuffer(imageSize, &stagingBuffer, data));
+
+	immediateSubmit([&](VkCommandBuffer cmd) {
+		vkutil::transitionImage(cmd, image->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		VkBufferImageCopy copyRegion = {};
+		copyRegion.bufferOffset = 0;
+		copyRegion.bufferRowLength = 0;
+		copyRegion.bufferImageHeight = 0;
+
+		copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		copyRegion.imageSubresource.mipLevel = 0;
+		copyRegion.imageSubresource.baseArrayLayer = 0;
+		copyRegion.imageSubresource.layerCount = 1;
+		copyRegion.imageExtent = image->imageExtent;
+
+		vkCmdCopyBufferToImage(cmd, stagingBuffer.buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+		vkutil::transitionImage(cmd, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+								VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	});
+
+	VK_RETURN(destroyBuffer(&stagingBuffer));
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::createFilledImage(AllocatedImage* image, void* data, VkExtent3D size, VkFormat format,
+									  VkImageUsageFlags usage) {
+	VK_RETURN(createImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, image, false));
+	VK_RETURN(fillImage(image, data));
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::destroyImage(AllocatedImage* image) {
+	vkDestroyImageView(m_device, image->imageView, nullptr);
+	vmaDestroyImage(m_allocator, image->image, image->allocation);
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::createSampler(VkSampler* sampler, VkSamplerCreateInfo* samplerInfo) {
+	VK_RETURN(vkCreateSampler(m_device, samplerInfo, nullptr, sampler));
+
+	m_deletionQueue.push_function([this, sampler] { destroySampler(sampler); });
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::destroySampler(VkSampler* sampler) {
+	vkDestroySampler(m_device, *sampler, nullptr);
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::initDescriptorSetLayout(VkeDescriptor* descriptorSet, VkShaderStageFlags shaderStages) {
+	VK_RETURN(descriptorSet->initLayout(m_device, shaderStages));
 
 	m_deletionQueue.push_function(
 		[this, descriptorSet] { vkDestroyDescriptorSetLayout(m_device, descriptorSet->m_descriptorSetLayout, nullptr); });
 
 	return VK_SUCCESS;
 }
+
+VkResult VkeDevice::allocateDescriptorSet(VkeDescriptor* descriptorSet, VkeDescriptorAllocator* allocator, bool temp) {
+	VK_RETURN(allocator->allocate(m_device, descriptorSet));
+
+	if (!temp) {
+		m_deletionQueue.push_function([this, allocator, descriptorSet] {
+			vkFreeDescriptorSets(m_device, allocator->m_pool, 1, &descriptorSet->m_descriptorSet);
+		});
+	}
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::initDescriptorPool(VkeDescriptorAllocator* allocator, uint32_t maxSets,
+									   std::span<VkeDescriptorAllocator::PoolSizeRatio> poolRatios) {
+	VK_RETURN(allocator->initPool(m_device, maxSets, poolRatios));
+
+	m_deletionQueue.push_function([this, allocator] { destroyDescriptorPool(allocator); });
+
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::destroyDescriptorPool(VkeDescriptorAllocator* allocator) {
+	allocator->destroyPoll(m_device);
+	return VK_SUCCESS;
+}
+
+VkResult VkeDevice::resetDescriptorPool(VkeDescriptorAllocator* allocator) { return allocator->resetDescriptorPool(m_device); }
 
 void VkeDevice::destroy() {
 	m_deletionQueue.flush();

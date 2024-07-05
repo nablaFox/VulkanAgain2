@@ -13,7 +13,7 @@ void VkePipeline::pushConstants(VkCommandBuffer cmd, GPUDrawPushConstants* const
 	vkCmdPushConstants(cmd, m_pipelineLayout, stage, 0, sizeof(GPUDrawPushConstants), constants);
 }
 
-VkePipeline& VkePipeline::setDescriptorSet(VkeDescriptorSet& descriptorSet) {
+VkePipeline& VkePipeline::setDescriptorSet(VkeDescriptor& descriptorSet) {
 	m_descriptorLayouts.push_back(&descriptorSet.m_descriptorSetLayout);
 	m_descriptorSets.push_back(&descriptorSet.m_descriptorSet);
 

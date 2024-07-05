@@ -24,12 +24,8 @@ struct FrameData {
 	VkCommandBuffer _commandBuffer;
 
 	vkutil::DeletionQueue _deletionQueue;
-};
 
-struct ImmediateData {
-	VkCommandBuffer _commandBuffer;
-	VkCommandPool _commandPool;
-	VkFence _fence;
+	VkeDescriptorAllocator _descriptorAllocator; // TODO: make growable
 };
 
 class VkEngine {
@@ -45,13 +41,15 @@ public:
 	void run();
 	void destroy();
 
-	void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
-	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
-
 	void drawGeometryTest();
 	void drawComputeTest();
 	void initTestData();
+
 	GPUMeshBuffers m_testMesh;
+	AllocatedImage m_whiteTexture;
+	AllocatedImage m_checkboardTexture;
+	VkSampler m_defaultSamplerLinear;
+	VkSampler m_defaultSamplerNearest;
 
 private:
 	VkeWindow m_window;
@@ -72,9 +70,12 @@ private:
 	VkeShader m_fragmentShader;
 	VkeShader m_computeShader;
 
-	ImmediateData m_immData;
+	GPUSceneData m_sceneData;
 
-	VkeDescriptorSet m_drawImageDescriptorSet;
+	VkeDescriptorAllocator m_globalDescriptorAllocator;
+	VkeDescriptor m_drawImageDescriptor;
+	VkeDescriptor m_globalSceneDescriptor;
+	VkeDescriptor m_materialDescriptor;
 
 private:
 	void startFrame();

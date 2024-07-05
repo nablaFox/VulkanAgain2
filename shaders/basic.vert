@@ -1,9 +1,13 @@
 #version 450
-// required as we are using BDA
+
+#extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference : require
 
-layout (location = 0) out vec3 outColor;
-layout (location = 1) out vec2 outUV;
+#include "common.glsl"
+
+layout (location = 0) out vec3 outNormal;
+layout (location = 1) out vec3 outColor;
+layout (location = 2) out vec2 outUV;
 
 struct Vertex {
 	vec3 position;
@@ -20,7 +24,7 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer {
 	Vertex vertices[];
 };
 
-// this will be the input of the shader
+// push constant block
 layout( push_constant ) uniform constants
 {	
 	mat4 render_matrix;
@@ -36,6 +40,7 @@ void main()
 	//output data
 	gl_Position = PushConstants.render_matrix * vec4(v.position, 1.0f);
 	outColor = v.color.xyz;
+	outNormal = vec3(0.5f, 0.5f, 0.f);
 	outUV.x = v.uv_x; // we are just passing the uv coordinates to the fragment shader
 	outUV.y = v.uv_y;
 }

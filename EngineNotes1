@@ -1,0 +1,24 @@
+Each rendered object uses a pipeline; 
+we only have a finite and static set of available pipelines, by default
+
+We keep a structure of objects to be rendered, i.e. the context array
+
+The user should only be able of running:
+
+- DrawGeneric --> for procedural mesh generation
+
+- uploadMesh --> preloading a model, that we can move around / rotate / transformate
+
+It doesn't know anything about the rendering context array
+
+drawGeneric(vertices, indices, pipeline*): generics.push(Generic(vertices, indices, pipeline))
+
+we keep an array of generics:
+
+In the drawLoop: 
+
+for each generic:
+	- create the buffer
+	- copy it
+	- render it
+	- destroy it

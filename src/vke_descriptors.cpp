@@ -2,16 +2,28 @@
 
 namespace vke {
 
-void VkeDescriptorSet::bindImage(VkImageView imageView, VkSampler sampler, VkImageLayout layout, VkShaderStageFlags stage,
-								 uint32_t binding) {
-	m_bindings.push_back({
-		.binding = binding,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 1,
-		.stageFlags = stage,
-		.pImmutableSamplers = nullptr,
-	});
+VkResult VkeDescriptor::initLayout(VkDevice device, VkShaderStageFlags shaderStages) {
+	for (VkDescriptorSetLayoutBinding& binding : m_bindings) {
+		binding.stageFlags |= shaderStages;
+	}
 
+	VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.bindingCount = (uint32_t)m_bindings.size(),
+		.pBindings = m_bindings.data(),
+	};
+
+	VK_RETURN(vkCreateDescriptorSetLayout(device, &layoutCreateInfo, nullptr, &m_descriptorSetLayout));
+	return VK_SUCCESS;
+}
+
+void VkeDescriptor::addBinding(uint32_t binding, VkDescriptorType type) {
+	m_bindings.push_back({.binding = binding, .descriptorType = type, .descriptorCount = 1});
+}
+
+void VkeDescriptor::writeImage(uint32_t binding, VkImageView imageView, VkSampler sampler, VkImageLayout layout) {
 	VkDescriptorImageInfo& info = m_imageInfos.emplace_back(VkDescriptorImageInfo{
 		.sampler = sampler,
 		.imageView = imageView,
@@ -22,13 +34,33 @@ void VkeDescriptorSet::bindImage(VkImageView imageView, VkSampler sampler, VkIma
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.pNext = nullptr,
 		.dstSet = VK_NULL_HANDLE,
+		.dstBinding = binding,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 		.pImageInfo = &info,
 	});
 }
 
-void DescriptorAllocator::initPool(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios) {
+void VkeDescriptor::writeBuffer(uint32_t binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type) {
+	VkDescriptorBufferInfo& info = m_bufferInfos.emplace_back(VkDescriptorBufferInfo{
+		.buffer = buffer,
+		.offset = offset,
+		.range = size,
+	});
+
+	VkWriteDescriptorSet write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = VK_NULL_HANDLE,
+		.dstBinding = binding,
+		.descriptorCount = 1,
+		.descriptorType = type,
+		.pBufferInfo = &info,
+	};
+
+	m_writes.push_back(write);
+}
+
+VkResult VkeDescriptorAllocator::initPool(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios) {
 	std::vector<VkDescriptorPoolSize> poolSizes;
 
 	for (PoolSizeRatio ratio : poolRatios) {
@@ -38,30 +70,20 @@ void DescriptorAllocator::initPool(VkDevice device, uint32_t maxSets, std::span<
 		});
 	}
 
-	VkDescriptorPoolCreateInfo poolInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-	poolInfo.flags = 0;
-	poolInfo.maxSets = maxSets;
-	poolInfo.poolSizeCount = (uint32_t)poolSizes.size();
-	poolInfo.pPoolSizes = poolSizes.data();
-
-	vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_pool);
-}
-
-void DescriptorAllocator::clearDescriptors(VkDevice device) { vkResetDescriptorPool(device, m_pool, 0); }
-
-void DescriptorAllocator::destroyPoll(VkDevice device) { vkDestroyDescriptorPool(device, m_pool, nullptr); }
-
-VkResult DescriptorAllocator::allocate(VkDevice device, VkeDescriptorSet* descriptorSet) {
-	VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.pNext = nullptr,
-		.flags = 0,
-		.bindingCount = (uint32_t)descriptorSet->m_bindings.size(),
-		.pBindings = descriptorSet->m_bindings.data(),
+	VkDescriptorPoolCreateInfo poolInfo = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+		.maxSets = maxSets,
+		.poolSizeCount = (uint32_t)poolSizes.size(),
+		.pPoolSizes = poolSizes.data(),
 	};
 
-	VK_RETURN(vkCreateDescriptorSetLayout(device, &layoutCreateInfo, nullptr, &descriptorSet->m_descriptorSetLayout));
+	return vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_pool);
+}
 
+VkResult VkeDescriptorAllocator::resetDescriptorPool(VkDevice device) { return vkResetDescriptorPool(device, m_pool, 0); }
+
+VkResult VkeDescriptorAllocator::allocate(VkDevice device, VkeDescriptor* descriptorSet) {
 	VkDescriptorSetAllocateInfo allocInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		.pNext = nullptr,
@@ -78,7 +100,13 @@ VkResult DescriptorAllocator::allocate(VkDevice device, VkeDescriptorSet* descri
 
 	vkUpdateDescriptorSets(device, (uint32_t)descriptorSet->m_writes.size(), descriptorSet->m_writes.data(), 0, nullptr);
 
+	descriptorSet->m_writes.clear();
+	descriptorSet->m_imageInfos.clear();
+	descriptorSet->m_bufferInfos.clear();
+
 	return VK_SUCCESS;
 }
+
+void VkeDescriptorAllocator::destroyPoll(VkDevice device) { vkDestroyDescriptorPool(device, m_pool, nullptr); }
 
 } // namespace vke

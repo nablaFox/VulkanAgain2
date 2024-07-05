@@ -12,11 +12,29 @@ void VkEngine::init(GameEngineSettings settings) {
 
 	m_swapchain.init(&m_device, m_window.getExtent(), VK_FORMAT_B8G8R8A8_UNORM);
 
-	VK_CHECK(m_device.initFrameData(m_frames, FRAME_OVERLAP));
+	std::vector<VkeDescriptorAllocator::PoolSizeRatio> frameSizes = {
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3},
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
+		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
+		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
+	};
 
-	VK_CHECK(m_device.createCommandPool(&m_immData._commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
-	VK_CHECK(m_device.allocateCommandBuffer(&m_immData._commandBuffer, m_immData._commandPool));
-	VK_CHECK(m_device.createFence(&m_immData._fence, VK_FENCE_CREATE_SIGNALED_BIT));
+	for (uint32_t i = 0; i < FRAME_OVERLAP; i++) {
+		VK_CHECK(m_device.createCommandPool(&m_frames[i]._commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+		VK_CHECK(m_device.allocateCommandBuffer(&m_frames[i]._commandBuffer, m_frames[i]._commandPool));
+
+		VK_CHECK(m_device.createSemaphore(&m_frames[i]._swapchainSemaphore));
+		VK_CHECK(m_device.createSemaphore(&m_frames[i]._renderSemaphore));
+		VK_CHECK(m_device.createFence(&m_frames[i]._renderFence, VK_FENCE_CREATE_SIGNALED_BIT));
+
+		VK_CHECK(m_device.initDescriptorPool(&m_frames[i]._descriptorAllocator, 100, frameSizes));
+	}
+
+	std::vector<VkeDescriptorAllocator::PoolSizeRatio> globalSizes = {
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+	};
+
+	VK_CHECK(m_device.initDescriptorPool(&m_globalDescriptorAllocator, 10, globalSizes));
 
 	VK_CHECK(m_device.createDrawImage(m_window.getExtent(), &m_drawImage));
 
@@ -33,10 +51,16 @@ void VkEngine::initPipelines() {
 	VK_CHECK(m_device.createShader(m_fragmentShader, "shaders/basic.frag.spv"));
 	VK_CHECK(m_device.createShader(m_computeShader, "shaders/basic.comp.spv"));
 
-	m_drawImageDescriptorSet.bindImage(m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL, VK_SHADER_STAGE_COMPUTE_BIT);
-	VK_CHECK(m_device.allocateDescriptorSet(&m_drawImageDescriptorSet));
-
 	auto bufferRange = vkutil::getPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(GPUDrawPushConstants));
+
+	m_globalSceneDescriptor.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	VK_CHECK(
+		m_device.initDescriptorSetLayout(&m_globalSceneDescriptor, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT));
+
+	m_materialDescriptor.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	m_materialDescriptor.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	m_materialDescriptor.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	VK_CHECK(m_device.initDescriptorSetLayout(&m_materialDescriptor, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT));
 
 	m_meshPipeline.setShaders(m_vertexShader, m_fragmentShader)
 		.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
@@ -46,9 +70,17 @@ void VkEngine::initPipelines() {
 		.disableBlending()
 		.disableDepthTest()
 		.setColorAttachmentFormat(m_drawImage.imageFormat)
-		.setPushConstantRange(bufferRange);
+		.setPushConstantRange(bufferRange)
+		.setDescriptorSet(m_globalSceneDescriptor);
+	// .setDescriptorSet(m_materialDescriptor);
 
-	m_computePipeline.setShader(m_computeShader).setDescriptorSet(m_drawImageDescriptorSet);
+	m_drawImageDescriptor.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	VK_CHECK(m_device.initDescriptorSetLayout(&m_drawImageDescriptor, VK_SHADER_STAGE_COMPUTE_BIT));
+
+	m_drawImageDescriptor.writeImage(0, m_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VK_CHECK(m_device.allocateDescriptorSet(&m_drawImageDescriptor, &m_globalDescriptorAllocator));
+
+	m_computePipeline.setShader(m_computeShader).setDescriptorSet(m_drawImageDescriptor);
 
 	VK_CHECK(m_device.createGraphicsPipeline(m_meshPipeline));
 	VK_CHECK(m_device.createComputePipeline(m_computePipeline));
@@ -70,7 +102,7 @@ void VkEngine::run() {
 
 		startFrame();
 
-		// drawComputeTest();
+		drawComputeTest();
 		drawGeometryTest();
 
 		endFrame();
@@ -82,6 +114,7 @@ void VkEngine::startFrame() {
 	VK_CHECK(vkResetFences(m_device.getDevice(), 1, &getCurrentFrame()._renderFence));
 
 	getCurrentFrame()._deletionQueue.flush();
+	VK_CHECK(m_device.resetDescriptorPool(&getCurrentFrame()._descriptorAllocator));
 
 	m_swapchain.acquireImage(getCurrentFrame()._swapchainSemaphore);
 
@@ -127,13 +160,30 @@ void VkEngine::drawGeometryTest() {
 	vkutil::setViewport(cmd, m_drawExtent);
 	vkutil::setScissor(cmd, m_drawExtent);
 
-	// draw
+	m_sceneData.sunlightColor = glm::vec4{1.f, 1.f, 1.f, 1.f};
+
+	// global scene data
+	AllocatedBuffer gpuSceneDataBuffer;
+	VK_CHECK(m_device.createBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU,
+								   &gpuSceneDataBuffer, true));
+
+	VK_CHECK(m_device.fillBuffer(&gpuSceneDataBuffer, &m_sceneData, sizeof(GPUSceneData)));
+
+	m_globalSceneDescriptor.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+
+	VK_CHECK(m_device.allocateDescriptorSet(&m_globalSceneDescriptor, &getCurrentFrame()._descriptorAllocator, true));
+
+	getCurrentFrame()._deletionQueue.push_function(
+		[this, gpuSceneDataBuffer]() mutable { m_device.destroyBuffer(&gpuSceneDataBuffer); });
+
+	// push constants for matrices and vertex buffer address
 	GPUDrawPushConstants push_constants;
 	push_constants.worldMatrix = glm::mat4{1.f};
 	push_constants.vertexBuffer = m_testMesh.vertexBufferAddress;
+	m_meshPipeline.pushConstants(cmd, &push_constants);
 
 	m_meshPipeline.bind(cmd);
-	m_meshPipeline.pushConstants(cmd, &push_constants);
+
 	vkCmdBindIndexBuffer(cmd, m_testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 	vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
@@ -166,77 +216,35 @@ void VkEngine::initTestData() {
 
 	std::array<uint32_t, 6> rect_indices = {0, 1, 2, 2, 1, 3};
 
-	m_testMesh = uploadMesh(rect_indices, rect_vertices);
-}
+	VK_CHECK(m_device.uploadMesh(&m_testMesh, rect_indices, rect_vertices));
 
-void VkEngine::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
-	VkCommandBuffer cmd = m_immData._commandBuffer;
+	// textures
+	uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
+	VK_CHECK(
+		m_device.createFilledImage(&m_whiteTexture, &white, {1, 1, 1}, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT));
 
-	VK_CHECK(vkResetFences(m_device.getDevice(), 1, &m_immData._fence));
-	VK_CHECK(vkResetCommandBuffer(cmd, 0));
+	uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
+	uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 1));
+	std::array<uint32_t, 16 * 16> pixels;
 
-	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+	for (int x = 0; x < 16; x++)
+		for (int y = 0; y < 16; y++)
+			pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
 
-	function(cmd);
+	VK_CHECK(m_device.createFilledImage(&m_checkboardTexture, pixels.data(), {16, 16, 1}, VK_FORMAT_R8G8B8A8_UNORM,
+										VK_IMAGE_USAGE_SAMPLED_BIT));
 
-	VK_CHECK(vkEndCommandBuffer(cmd));
-
-	VkCommandBufferSubmitInfo cmdinfo = vkinit::commandBufferSubmitInfo(cmd);
-	VkSubmitInfo2 submit = vkinit::submitInfo(&cmdinfo, nullptr, nullptr);
-
-	VK_CHECK(m_device.submitCommand(1, &submit, m_immData._fence));
-	VK_CHECK(vkWaitForFences(m_device.getDevice(), 1, &m_immData._fence, true, 9999999999));
-}
-
-GPUMeshBuffers VkEngine::uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
-	const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
-	const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
-
-	GPUMeshBuffers newSurface;
-	VK_CHECK(m_device.createBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-								   VMA_MEMORY_USAGE_GPU_ONLY, &newSurface.indexBuffer));
-
-	VK_CHECK(m_device.createBuffer(vertexBufferSize,
-								   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-									   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-								   VMA_MEMORY_USAGE_GPU_ONLY, &newSurface.vertexBuffer));
-
-	VkBufferDeviceAddressInfo deviceAdressInfo{
-		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-		.buffer = newSurface.vertexBuffer.buffer,
+	VkSamplerCreateInfo sampl = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_NEAREST,
+		.minFilter = VK_FILTER_NEAREST,
 	};
 
-	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(m_device.getDevice(), &deviceAdressInfo);
+	VK_CHECK(m_device.createSampler(&m_defaultSamplerNearest, &sampl));
 
-	AllocatedBuffer staging;
-	void* data;
-
-	VK_CHECK(m_device.createStagingBuffer(vertexBufferSize + indexBufferSize, &staging, data));
-
-	memcpy(data, vertices.data(), vertexBufferSize);
-	memcpy((char*)data + vertexBufferSize, indices.data(), indexBufferSize);
-
-	immediateSubmit([&](VkCommandBuffer cmd) {
-		VkBufferCopy vertexCopy{
-			.srcOffset = 0,
-			.dstOffset = 0,
-			.size = vertexBufferSize,
-		};
-
-		VkBufferCopy indexCopy{
-			.srcOffset = vertexBufferSize,
-			.dstOffset = 0,
-			.size = indexBufferSize,
-		};
-
-		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
-		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
-	});
-
-	VK_CHECK(m_device.destroyBuffer(&staging));
-
-	return newSurface;
+	sampl.magFilter = VK_FILTER_LINEAR;
+	sampl.minFilter = VK_FILTER_LINEAR;
+	VK_CHECK(m_device.createSampler(&m_defaultSamplerLinear, &sampl));
 }
 
 void VkEngine::destroy() {
@@ -244,6 +252,10 @@ void VkEngine::destroy() {
 		return;
 
 	m_device.waitIdle();
+
+	for (uint32_t i = 0; i < FRAME_OVERLAP; i++) {
+		m_frames[i]._deletionQueue.flush();
+	}
 
 	m_swapchain.destroy();
 
