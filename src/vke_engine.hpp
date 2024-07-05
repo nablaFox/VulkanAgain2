@@ -7,7 +7,7 @@
 #include "vke_window.hpp"
 #include "vke_pipelines.hpp"
 
-#include "vke_system.hpp"
+#include "vke_system_manager.hpp"
 #include "vke_scene.hpp"
 
 namespace vke {
@@ -50,17 +50,30 @@ public:
 	void drawComputeTest();
 	void initTestData();
 
+	std::shared_ptr<VkeScene> createScene() { return m_sceneManager.createAsset(); }
+	VkeScene& getCurrentScene() { return m_sceneManager.getCurrentScene(); }
+	void switchScene(const std::string& name) { m_sceneManager.switchScene(name); }
+
+	void registerAsset(const std::string& name, std::shared_ptr<VkeAsset> asset) {
+		if (auto scene = std::dynamic_pointer_cast<VkeScene>(asset)) {
+			m_sceneManager.registerAsset(name, scene);
+		}
+	}
+
 	template <typename T>
-	enable_if_vke_sys_t<T> registerSystem() {
+	void registerSystem() {
+		static_assert(std::is_base_of<VkeSystem, T>::value, "T must be a VkeSystem derived class");
 		m_systemManager.registerSystem<T>(this);
 	}
 
 	template <typename T>
-	enable_if_vke_scene_t<T> registerScene(const std::string& name) {
-		m_sceneManager.registerAsset<T>(name);
-	}
+	void registerAsset(const std::string& name) {
+		static_assert(std::is_base_of<VkeAsset, T>::value, "T must be a VkeAsset derived class");
 
-	void switchScene(const std::string& name) { m_sceneManager.switchScene(name); }
+		if (std::is_base_of<VkeScene, T>::value) {
+			m_sceneManager.registerAsset<T>(name);
+		}
+	}
 
 	GPUMeshBuffers m_testMesh;
 	AllocatedImage m_whiteTexture;
@@ -95,7 +108,7 @@ private:
 	VkeDescriptor m_materialDescriptor;
 
 	VkeSceneManager m_sceneManager;
-	VkeSystemManager m_systemManager{m_sceneManager};
+	VkeSystemManager m_systemManager;
 
 private:
 	void startFrame();

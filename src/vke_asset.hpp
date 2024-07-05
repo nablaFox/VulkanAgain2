@@ -7,7 +7,7 @@ namespace vke {
 
 class VkeAsset {
 public:
-	virtual void setup() = 0;
+	virtual void setup(){};
 	std::string name;
 };
 
@@ -17,6 +17,17 @@ public:
 	template <typename T>
 	void registerAsset(const std::string& name) {
 		setupAsset<T>(name);
+	}
+
+	virtual std::shared_ptr<AssetType> createAsset() {
+		auto asset = std::make_shared<AssetType>();
+		asset->setup();
+		return asset;
+	}
+
+	void registerAsset(const std::string& name, std::shared_ptr<AssetType>& asset) {
+		assets[name] = asset;
+		assets[name]->name = name;
 	}
 
 	void unregisterAsset(const std::string& name) { assets.erase(name); }

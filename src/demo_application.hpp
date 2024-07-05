@@ -1,4 +1,7 @@
 #include "vke_engine.hpp"
+#include "vke_system.hpp"
+
+#include <iostream>
 
 using namespace vke;
 
@@ -33,16 +36,25 @@ public:
 
 class DemoSystem : public VkeSystem {
 public:
-	void awake() override { fmt::print("DemoSystem awake\n"); }
+	void awake() override {
+		auto scene = m_engine->createScene();
+		scene->addEntity<DemoComponent>(100);
+
+		m_engine->registerAsset("test", scene);
+
+		fmt::print("DemoSystem awake\n");
+	}
 
 	void update(float deltaTime) override {
 		int i = 0;
-		getEntities<DemoComponent>().each([this, &i](auto& component) {
+
+		currentScene().getEntities<DemoComponent>().each([this, &i](auto& component) {
 			fmt::print("Entity {} DemoComponent value: {}\n", i, component.value1);
 			component.value1++;
 
-			if (component.value1 % 2 == 0) {
-				m_engine->switchScene("scene2");
+			if (component.value1 % 10 == 0) {
+				// m_engine->switchScene("test");
+			} else {
 			}
 
 			i++;
@@ -53,8 +65,9 @@ public:
 class DemoApplication : public Application {
 public:
 	void setup() override {
-		registerScene<InitialScene>("initial");
-		registerScene<Scene2>("scene2");
+		registerAsset<InitialScene>("initial");
+		registerAsset<Scene2>("scene2");
+
 		registerSystem<DemoSystem>();
 
 		switchScene("initial");

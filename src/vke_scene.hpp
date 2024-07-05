@@ -10,8 +10,6 @@
 
 namespace vke {
 
-class VkEngine;
-
 class VkeScene : public VkeAsset {
 	friend class VkeSceneManager;
 	friend class VkeSystemManager;
@@ -31,6 +29,12 @@ public:
 		m_entities.emplace<T>(entity, std::forward<Args>(component)...);
 	}
 
+	template <typename T>
+	auto getEntities() {
+		auto entities = m_entities.view<T>();
+		return entities;
+	}
+
 	void removeEntity(entt::entity entity);
 
 protected:
@@ -45,11 +49,10 @@ public:
 
 	void switchScene(std::unique_ptr<VkeScene> scene);
 
+	VkeScene& getCurrentScene() { return *currentScene; }
+
 private:
 	std::shared_ptr<VkeScene> currentScene;
 };
-
-template <typename T>
-using enable_if_vke_scene_t = std::enable_if_t<std::is_base_of_v<VkeScene, T>>;
 
 } // namespace vke
