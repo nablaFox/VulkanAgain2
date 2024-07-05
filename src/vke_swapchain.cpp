@@ -3,7 +3,7 @@
 #include "vke_swapchain.hpp"
 #include <vulkan/vulkan_core.h>
 
-namespace vke {
+using namespace vke;
 
 void VkeSwapchain::init(VkeDevice* device, VkExtent2D extent, VkFormat format) {
 	m_device = device;
@@ -60,5 +60,3 @@ void VkeSwapchain::destroy() {
 
 	m_device = nullptr;
 }
-
-} // namespace vke

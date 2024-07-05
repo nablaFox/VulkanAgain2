@@ -2,7 +2,7 @@
 #include "vke_device.hpp"
 #include "vke_initializers.hpp"
 
-namespace vke {
+using namespace vke;
 
 VkePipeline::VkePipeline() {
 	m_pipeline = VK_NULL_HANDLE;
@@ -146,8 +146,6 @@ VkeComputePipeline& VkeComputePipeline::setShader(VkeShader& computeShader) {
 	m_computeInfo.stage = vkinit::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, computeShader.getModule());
 	return *this;
 }
-
-} // namespace vke
 
 VkPushConstantRange vkutil::getPushConstantRange(VkShaderStageFlags stage, uint32_t size, uint32_t offset) {
 	return {

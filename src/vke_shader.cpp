@@ -1,7 +1,7 @@
 #include "vke_shader.hpp"
 #include <fstream>
 
-namespace vke {
+using namespace vke;
 
 VkResult VkeShader::loadShaderModule(const char* filePath, std::vector<uint32_t>& buffer) {
 	std::ifstream file(filePath, std::ios::ate | std::ios::binary);
@@ -21,5 +21,3 @@ VkResult VkeShader::loadShaderModule(const char* filePath, std::vector<uint32_t>
 
 	return VK_SUCCESS;
 }
-
-} // namespace vke

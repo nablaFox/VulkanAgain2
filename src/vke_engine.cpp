@@ -3,7 +3,7 @@
 #include "vke_images.hpp"
 #include "vke_initializers.hpp"
 
-namespace vke {
+using namespace vke;
 
 void VkEngine::init(GameEngineSettings settings) {
 	VK_CHECK(m_window.init(settings.appName, settings.windowWidth, settings.windowHeight));
@@ -263,5 +263,3 @@ void VkEngine::destroy() {
 
 	m_window.destroy();
 }
-
-} // namespace vke

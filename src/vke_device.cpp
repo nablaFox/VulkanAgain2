@@ -5,7 +5,7 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
-namespace vke {
+using namespace vke;
 
 constexpr bool useValidationLayers = true; // TODO: handle debug mode in a better way
 
@@ -483,5 +483,3 @@ void VkeDevice::destroy() {
 	vkb::destroy_debug_utils_messenger(m_vkInstance, m_debugMessenger);
 	vkDestroyInstance(m_vkInstance, nullptr);
 }
-
-} // namespace vke

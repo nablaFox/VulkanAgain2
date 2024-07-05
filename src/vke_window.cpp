@@ -3,7 +3,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-namespace vke {
+using namespace vke;
 
 // TODO: add other parameters
 VkResult VkeWindow::init(const char* title, uint32_t width, uint32_t height) {
@@ -20,5 +20,3 @@ void VkeWindow::destroy() {
 	glfwDestroyWindow(m_window);
 	glfwTerminate();
 }
-
-} // namespace vke

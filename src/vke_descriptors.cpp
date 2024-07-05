@@ -1,6 +1,6 @@
 #include "vke_descriptors.hpp"
 
-namespace vke {
+using namespace vke;
 
 VkResult VkeDescriptor::initLayout(VkDevice device, VkShaderStageFlags shaderStages) {
 	for (VkDescriptorSetLayoutBinding& binding : m_bindings) {
@@ -108,5 +108,3 @@ VkResult VkeDescriptorAllocator::allocate(VkDevice device, VkeDescriptor* descri
 }
 
 void VkeDescriptorAllocator::destroyPoll(VkDevice device) { vkDestroyDescriptorPool(device, m_pool, nullptr); }
-
-} // namespace vke
