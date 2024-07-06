@@ -1,14 +1,14 @@
 #pragma once
 
-#include "vke_descriptors.hpp"
-#include "vke_device.hpp"
-#include "vke_types.hpp"
-#include "vke_utils.hpp"
-#include "vke_window.hpp"
-#include "vke_pipelines.hpp"
-
-#include "vke_system_manager.hpp"
-#include "vke_scene.hpp"
+#include "../renderer/vke_descriptors.hpp"
+#include "../renderer/vke_device.hpp"
+#include "../assets/vke_material.hpp"
+#include "../renderer/vke_types.hpp"
+#include "../renderer/vke_utils.hpp"
+#include "../renderer/vke_window.hpp"
+#include "../renderer/vke_pipelines.hpp"
+#include "../assets/vke_scene.hpp"
+#include "../systems/vke_system_manager.hpp"
 
 namespace vke {
 
@@ -50,15 +50,12 @@ public:
 	void drawComputeTest();
 	void initTestData();
 
-	std::shared_ptr<VkeScene> createScene() { return m_sceneManager.createAsset(); }
+	std::shared_ptr<VkeScene> createScene(const std::string& name) { return m_sceneManager.registerAsset(name); }
 	VkeScene& getCurrentScene() { return m_sceneManager.getCurrentScene(); }
 	void switchScene(const std::string& name) { m_sceneManager.switchScene(name); }
 
-	void registerAsset(const std::string& name, std::shared_ptr<VkeAsset> asset) {
-		if (auto scene = std::dynamic_pointer_cast<VkeScene>(asset)) {
-			m_sceneManager.registerAsset(name, scene);
-		}
-	}
+	template <typename T>
+	struct dependent_false : std::false_type {};
 
 	template <typename T>
 	void registerSystem() {
@@ -70,8 +67,12 @@ public:
 	void registerAsset(const std::string& name) {
 		static_assert(std::is_base_of<VkeAsset, T>::value, "T must be a VkeAsset derived class");
 
-		if (std::is_base_of<VkeScene, T>::value) {
+		if constexpr (std::is_base_of<VkeScene, T>::value) {
 			m_sceneManager.registerAsset<T>(name);
+		} else if constexpr (std::is_base_of<VkeMaterial, T>::value) {
+			m_materialManager.registerAsset<T>(name);
+		} else {
+			static_assert(dependent_false<T>::value, "T must be a VkeAsset derived class");
 		}
 	}
 
@@ -109,6 +110,7 @@ private:
 
 	VkeSceneManager m_sceneManager;
 	VkeSystemManager m_systemManager;
+	VkeMaterialManager m_materialManager;
 
 private:
 	void startFrame();

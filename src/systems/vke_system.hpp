@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vke_scene.hpp"
-#include "vke_engine.hpp"
+#include "../assets/vke_scene.hpp"
+#include "../engine/vke_engine_core.hpp"
 
 namespace vke {
 
@@ -23,7 +23,7 @@ protected: // TODO: make this private
 	VkEngine* m_engine;
 };
 
-// for other type of systems, which includes particular methods
+// for other type of systems, which includes particular methods, which we provide to the user
 class VkeSystemScript : public VkeSystem {};
 
 } // namespace vke

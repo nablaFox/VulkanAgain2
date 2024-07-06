@@ -1,12 +1,12 @@
 #pragma once
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 namespace vke {
 
-class VkeSystem;
 class VkEngine;
+class VkeSystem;
 
 class VkeSystemManager {
 public:

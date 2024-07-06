@@ -1,7 +1,7 @@
-#include "vke_pipelines.hpp"
-#include "vke_engine.hpp"
-#include "vke_images.hpp"
-#include "vke_initializers.hpp"
+#include "vke_engine_core.hpp"
+#include "../renderer/vke_utils.hpp"
+#include "../renderer/vke_images.hpp"
+#include "../renderer/vke_initializers.hpp"
 
 using namespace vke;
 

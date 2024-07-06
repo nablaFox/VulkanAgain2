@@ -11,9 +11,6 @@
 namespace vke {
 
 class VkeScene : public VkeAsset {
-	friend class VkeSceneManager;
-	friend class VkeSystemManager;
-
 public:
 	entt::entity addEntity() { return m_entities.create(); }
 
@@ -35,19 +32,23 @@ public:
 		return entities;
 	}
 
-	void removeEntity(entt::entity entity);
+	void removeEntity(entt::entity entity) { m_entities.destroy(entity); }
 
 protected:
 	entt::registry m_entities;
 };
 
 class VkeSceneManager : public VkeAssetManager<VkeScene> {
-	friend class VkeSystemManager;
-
 public:
-	void switchScene(const std::string& name);
+	void switchScene(const std::string& name) {
+		if (currentScene != nullptr && currentScene->name == name) {
+			fmt::println("Already in '{}' scene", name);
+			return;
+		}
 
-	void switchScene(std::unique_ptr<VkeScene> scene);
+		fmt::println("Switching to '{}' scene", name);
+		currentScene = assets[name];
+	}
 
 	VkeScene& getCurrentScene() { return *currentScene; }
 

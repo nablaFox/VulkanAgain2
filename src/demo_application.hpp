@@ -1,7 +1,4 @@
-#include "vke_engine.hpp"
-#include "vke_system.hpp"
-
-#include <iostream>
+#include "engine/vke_engine.hpp"
 
 using namespace vke;
 
@@ -29,6 +26,11 @@ public:
 	}
 };
 
+class CustomMaterial : public VkeMaterial {
+public:
+	void setup() override { fmt::print("Material setup\n"); };
+};
+
 class Scene2 : public VkeScene {
 public:
 	void setup() override { addEntity<DemoComponent>(20); }
@@ -37,12 +39,11 @@ public:
 class DemoSystem : public VkeSystem {
 public:
 	void awake() override {
-		auto scene = m_engine->createScene();
-		scene->addEntity<DemoComponent>(100);
+		// auto scene = m_engine->createScene("test");
+		// scene->addEntity<DemoComponent>(100);
+		//
 
-		m_engine->registerAsset("test", scene);
-
-		fmt::print("DemoSystem awake\n");
+		// fmt::print("DemoSystem awake\n");
 	}
 
 	void update(float deltaTime) override {
@@ -67,6 +68,7 @@ public:
 	void setup() override {
 		registerAsset<InitialScene>("initial");
 		registerAsset<Scene2>("scene2");
+		registerAsset<CustomMaterial>("custom_material");
 
 		registerSystem<DemoSystem>();
 
